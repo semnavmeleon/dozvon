@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Автодозвон: обзвон клиентов</title>
+<script src="vendor/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f3f5fa;
+    --card-bg: #ffffff;
+    --border: #e0e4ee;
+    --border-soft: #f0f1f6;
+    --text: #1c2130;
+    --text-muted: #656c7a;
+    --text-faint: #98a0ae;
+    --primary: #2a6fdb;
+    --primary-dark: #1f57ad;
+    --primary-bg: #eaf1fd;
+    --success: #16803c;
+    --success-bg: #e9f9ef;
+    --warn: #b7791f;
+    --warn-bg: #fdf5e3;
+    --error: #c22032;
+    --error-bg: #fdecee;
+    --note-bg: #fff8e1;
+    --radius-lg: 10px;
+    --radius-md: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; line-height: 1.45;
+  }
+  body.call-open { overflow: hidden; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
+  .subtitle { color: var(--text-muted); font-size: 13.5px; margin: 0 0 18px; }
+  .topnav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  .grow { flex: 1; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+  .card h2 { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-faint); margin: 0 0 14px; }
+  label { display: block; font-size: 12.5px; color: var(--text-muted); margin: 12px 0 4px; }
+  input[type=file] { display: block; width: 100%; font-size: 13px; color: var(--text-muted); }
+  select, input[type=text] {
+    width: 100%; font: inherit; font-size: 13.5px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text);
+  }
+  select:disabled { color: var(--text-faint); background: #f7f8fb; }
+  .file-meta { font-size: 12px; color: var(--text-faint); margin-top: 6px; min-height: 16px; }
+  .actions { margin: 14px 0 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 600; font-size: 13.5px; padding: 9px 16px;
+    border-radius: var(--radius-md); border: none; cursor: pointer;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:disabled { background: #b9c6dd; cursor: not-allowed; }
+  .btn-secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #f5f6fa; }
+  .btn-secondary:disabled { color: var(--text-faint); cursor: not-allowed; }
+  .btn-secondary.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary-dark); }
+  .btn-small { padding: 4px 10px; font-size: 12.5px; }
+  .btn-call { background: var(--success); color: #fff; }
+  .btn-hang { background: var(--error); color: #fff; }
+  .status-msg { font-size: 13px; color: var(--text-muted); }
+  .status-line { font-size: 12px; color: var(--text-muted); min-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  input.search { max-width: 280px; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .stat { flex: 1; min-width: 130px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; }
+  .stat.ok .num { color: var(--success); }
+  .stat.warn .num { color: var(--warn); }
+  .stat.bad .num { color: var(--error); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .table-wrap {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: auto; max-height: 62vh; margin-bottom: 12px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: nowrap; }
+  thead th {
+    position: sticky; top: 0; background: #f7f8fb; text-align: left; padding: 8px 10px;
+    border-bottom: 1px solid var(--border); font-weight: 700; color: var(--text-muted); z-index: 1;
+  }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: #f7f9fd; }
+  td.rownum { color: var(--text-faint); text-align: right; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .badge.ok { background: var(--success-bg); color: var(--success); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--error-bg); color: var(--error); }
+  .badge.info { background: var(--primary-bg); color: var(--primary-dark); }
+  .empty-state { padding: 36px 20px; text-align: center; color: var(--text-faint); font-size: 13.5px; }
+  .hidden { display: none !important; }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .sum-stat { background: var(--bg); border-radius: var(--radius-md); padding: 10px 14px; min-width: 150px; }
+  .sum-stat b { font-size: 20px; display: block; }
+  .sum-stat span { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; }
+  .scroll { max-height: 360px; overflow: auto; }
+
+  /* Полноэкранный прозвон. Клиент на первом месте, всё помещается в окно без прокрутки */
+  #call { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .topbar { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; padding: 8px 14px; background: var(--card-bg); border-bottom: 1px solid var(--border); min-width: 0; }
+  .topbar button { padding: 7px 12px; font-size: 13px; white-space: nowrap; }
+  .topbar .pos { font-weight: 700; white-space: nowrap; }
+  .progress { flex: 0 1 220px; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+  .callbody { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; padding: 12px; min-height: 0; overflow: hidden; }
+  .col { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .cl-name { font-size: clamp(22px, 3.8vh, 32px); font-weight: 700; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cl-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cl-phone { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0 12px; }
+  .cl-phone .num { font-size: clamp(24px, 4.4vh, 38px); font-weight: 700; letter-spacing: .3px; color: var(--primary-dark); white-space: nowrap; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .fact { background: var(--bg); border-radius: var(--radius-md); padding: 6px 10px; min-width: 0; }
+  .fact .fk { display: block; font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fact .fv { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .comment { background: var(--note-bg); border: 1px solid #f1e3a6; border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; flex: 0 0 auto; max-height: 30%; overflow: hidden; }
+  .comment .lbl { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+  .comment.empty { background: #f7f8fb; border-color: var(--border); }
+  #cComment { font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+  .sec-title { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin: 4px 0; }
+  .fields { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; font-size: 13px; }
+  .field { display: flex; gap: 8px; min-width: 0; padding: 3px 0; border-bottom: 1px solid var(--border-soft); flex: 0 0 auto; }
+  .field.hidden { display: none; }
+  .field .k { flex: 0 0 36%; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .field .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { font-size: 12px; color: var(--text-faint); min-height: 16px; margin-top: 4px; }
+  .phone-status { font-size: 18px; font-weight: 700; padding: 8px; border-radius: var(--radius-md); background: #f7f8fb; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .phone-status.ok { color: var(--success); background: var(--success-bg); }
+  .phone-status.warn { color: var(--warn); background: var(--warn-bg); }
+  .phone-status.bad { color: var(--error); background: var(--error-bg); }
+  .timer { font-size: 22px; text-align: center; height: 30px; line-height: 30px; margin: 2px 0; color: var(--text-muted); }
+  .btnrow { display: flex; gap: 6px; margin: 4px 0; }
+  .btnrow button { flex: 1; min-width: 0; padding: 9px 6px; font-size: 14px; white-space: nowrap; }
+  .keypad { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; margin: 6px 0; }
+  .keypad button { padding: 8px 0; font-size: 16px; background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .note-label { font-size: 12px; color: var(--text-muted); margin: 6px 0 4px; }
+  .note { flex: 1; min-height: 60px; resize: none; width: 100%; font: inherit; font-size: 13.5px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); }
+  .resultbar { display: flex; flex-wrap: nowrap; gap: 6px; padding: 10px 12px; background: var(--card-bg); border-top: 1px solid var(--border); min-width: 0; }
+  .resultbar button { flex: 1; min-width: 0; padding: 10px 6px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .resultbar button:hover { background: #f5f6fa; }
+  .resultbar kbd { font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 5px; color: var(--text-muted); }
+
+  /* Телефон: простой режим */
+  .phone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .phone-grid { grid-template-columns: 1fr; } }
+  .phone-grid .card h2 { font-size: 12.5px; }
+  .dial-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .dial-row input, .dial-row select { flex: 1; min-width: 180px; }
+  .dial-row input { font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); }
+
+  /* Клавиши телефона: группы кнопок (используются и в простом, и в расширенном режимах) */
+  .keygroup { margin-bottom: 12px; }
+  .keygroup .gt { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
+  .keygrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 5px; }
+  .keygrid button { padding: 7px 6px; font-size: 13px; background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .keygrid button:hover { background: #f5f6fa; }
+
+  /* Журнал событий */
+  .log { max-height: 320px; overflow: auto; font-size: 12px; font-family: Consolas, "Courier New", monospace; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fbfcfe; padding: 6px 8px; }
+  .log div { padding: 3px 0; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .t { color: var(--text-faint); margin-right: 8px; }
+  .raw { font-size: 11.5px; background: #fbfcfe; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow: auto; margin: 0; }
+
+  /* Расширенный режим прозвона: три колонки, всё видно, карточка и журнал прокручиваются */
+  body.advanced .callbody { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr); }
+  body.advanced .callbody > section { overflow: auto; }
+  body.advanced .fields { overflow: visible; }
+  body.advanced #cAdvBox .log { max-height: 30vh; }
+  #cAdvBox .keygrid { grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); }
+  #cAdvBox .keygrid button { font-size: 12px; padding: 5px 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Автодозвон: обзвон клиентов</h1>
+  <p class="subtitle">Базы читаются в браузере и никуда не отправляются. Телефон Yealink набирает номера по команде со страницы.</p>
+
+  <div class="topnav">
+    <button class="btn-primary" data-stage="data">1. Данные</button>
+    <button class="btn-secondary" data-stage="overview">2. Обзор базы</button>
+    <button class="btn-secondary" data-stage="phone">Телефон: полное управление</button>
+    <button class="btn-secondary" data-stage="compare">3. Сверка</button>
+    <button class="btn-secondary" id="openCall">4. Прозвон на весь экран</button>
+    <span class="grow"></span>
+    <span id="srv" class="badge warn">Сервер: проверка…</span>
+  </div>
+
+  <!-- 1. Данные -->
+  <section id="stage-data">
+    <div class="cards">
+      <div class="card">
+        <h2>База 1 · источник номеров</h2>
+        <input type="file" id="f1" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="file-meta" id="m1">Файл не загружен</div>
+        <label>Лист</label>
+        <select id="sh1" disabled></select>
+        <label>Ключ клиента (уникальный номер или ID)</label>
+        <select id="key1" disabled></select>
+        <label>Столбец с телефоном для набора</label>
+        <select id="phone1" disabled></select>
+      </div>
+      <div class="card">
+        <h2>База 2 · результаты колл-центра</h2>
+        <input type="file" id="f2" accept=".xlsx,.xls,.xlsm,.csv">
+        <div class="file-meta" id="m2">Необязательно: без базы 2 результаты пишутся в новый файл</div>
+        <label>Лист</label>
+        <select id="sh2" disabled></select>
+        <label>Ключ клиента в базе 2</label>
+        <select id="key2" disabled></select>
+        <label>Столбец комментария колл-центра (показывается в карточке)</label>
+        <select id="comment2" disabled></select>
+        <label>Столбец результата обзвона (создаётся, если нет)</label>
+        <input type="text" id="result2" list="hdr2">
+        <label>Столбец комментария оператора (создаётся, если нет)</label>
+        <input type="text" id="note2" list="hdr2">
+        <label>Столбец даты обзвона (создаётся, если нет)</label>
+        <input type="text" id="date2" list="hdr2">
+        <datalist id="hdr2"></datalist>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn-secondary" id="exportBtn">Скачать базу 2 с результатами</button>
+      <span class="status-msg" id="exportInfo"></span>
+    </div>
+  </section>
+
+  <!-- 2. Обзор базы: таблица источника с фильтрами, статусом обзвона и выбором клиента -->
+  <section id="stage-overview" class="hidden">
+    <div class="summary" id="ovStats"></div>
+    <div class="toolbar">
+      <div id="ovFilters" class="toolbar" style="margin:0"></div>
+      <span class="grow"></span>
+      <input type="text" class="search" id="ovSearch" placeholder="Поиск по всем столбцам">
+      <button class="btn-primary" id="ovStart">Прозвон по списку</button>
+    </div>
+    <div class="status-msg" id="ovNote" style="margin-bottom:8px"></div>
+    <div class="table-wrap">
+      <table>
+        <thead id="ovHead"></thead>
+        <tbody id="ovBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Телефон: простой режим, полное управление без клиентской базы -->
+  <section id="stage-phone" class="hidden">
+    <div class="phone-grid">
+      <div class="card">
+        <h2>Набор номера</h2>
+        <div class="dial-row">
+          <input type="text" id="pNum" placeholder="Номер, например 89161234567" inputmode="tel">
+          <button class="btn-call" id="pDial">Набрать</button>
+          <button class="btn-hang" id="pHang">Сбросить</button>
+        </div>
+        <div class="phone-status" id="pState" style="margin-top:12px">Готов</div>
+        <div class="status-line" id="pErr" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h2>Все клавиши телефона</h2>
+        <div id="pKeys"></div>
+      </div>
+      <div class="card">
+        <h2>Любая разрешённая клавиша</h2>
+        <div class="dial-row">
+          <select id="pKeySel"></select>
+          <button class="btn-secondary" id="pKeySend">Отправить</button>
+        </div>
+        <div class="status-line" style="margin-top:8px;white-space:normal">Список берётся с сервера. Reboot и AutoP сюда не входят: это перезагрузка и автопровижн.</div>
+      </div>
+      <div class="card">
+        <h2>Журнал: события телефона и команды</h2>
+        <div class="log" id="pLog"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Сверка -->
+  <section id="stage-compare" class="hidden">
+    <div class="actions">
+      <button class="btn-primary" id="runCompare">Сверить базы</button>
+      <span class="status-msg">Совпадение по ключу клиента. Сравниваются одинаковые столбцы обеих баз.</span>
+    </div>
+    <div id="cmpResult"></div>
+  </section>
+</div>
+
+<!-- 4. Прозвон на весь экран -->
+<div id="call" class="hidden">
+  <div class="topbar">
+    <span class="pos" id="cPos"></span>
+    <div class="progress"><div id="cProgress"></div></div>
+    <span class="grow"></span>
+    <button class="btn-secondary" id="cPrev">← Назад</button>
+    <button class="btn-secondary" id="cNext">Дальше →</button>
+    <button class="btn-secondary" id="cAdv">Расширенный режим</button>
+    <button class="btn-secondary" id="cExport">Скачать результаты</button>
+    <button class="btn-secondary" id="cExit">К обзору</button>
+  </div>
+
+  <div class="callbody">
+    <section class="col">
+      <div class="cl-name" id="cName"></div>
+      <div class="cl-meta" id="cMeta"></div>
+      <div class="cl-phone">
+        <span class="num" id="cPhone"></span>
+        <button class="btn-secondary btn-small" id="bCopy">Копировать</button>
+      </div>
+      <div class="facts" id="cFacts"></div>
+      <div class="comment empty" id="cCommentBox">
+        <div class="lbl">Комментарий колл-центра</div>
+        <div id="cComment"></div>
+      </div>
+      <div class="sec-title">Остальные данные клиента</div>
+      <div class="fields" id="cFields"></div>
+      <div class="more" id="cMore"></div>
+    </section>
+
+    <section class="col">
+      <div class="phone-status" id="cState">Готов к звонку</div>
+      <div class="timer" id="cTimer"></div>
+      <div class="btnrow">
+        <button class="btn-call" id="bDial">Набрать</button>
+        <button class="btn-hang" id="bHang">Сбросить</button>
+      </div>
+      <div class="btnrow">
+        <button class="btn-secondary" id="bSpeaker">Громкая связь</button>
+        <button class="btn-secondary" id="bSkip">Пропустить</button>
+      </div>
+      <div class="keypad" id="keypad"></div>
+      <div class="status-line" id="cErr"></div>
+      <div class="status-line" id="cPrevResult"></div>
+      <div class="note-label">Комментарий оператора (сохранится с результатом)</div>
+      <textarea class="note" id="cNote"></textarea>
+    </section>
+
+    <section class="col hidden" id="cAdvBox">
+      <div class="sec-title">Журнал событий телефона и команды</div>
+      <div class="log" id="cLog"></div>
+      <div class="sec-title">Все клавиши телефона</div>
+      <div id="cKeys"></div>
+      <div class="sec-title">Сырые данные: строка базы 1 и строка базы 2</div>
+      <pre class="raw" id="cRaw"></pre>
+    </section>
+  </div>
+
+  <div class="resultbar" id="resultBar"></div>
+</div>
+
+<script>
+const RESULTS = [
+  {label:'Ответил', value:'Дозвон: ответил', hot:'1'},
+  {label:'Не ответил', value:'Не ответил', hot:'2'},
+  {label:'Занято', value:'Занято', hot:'3'},
+  {label:'Отказ', value:'Отказ от услуги', hot:'4'},
+  {label:'Перезвонить', value:'Просил перезвонить', hot:'5'},
+  {label:'Неверный номер', value:'Неверный номер', hot:'6'},
+];
+// Все события Action URL со страницы Features -> Action URL (имена совпадают с сервером)
+const EVENT_TEXT = {
+  setup_completed:'Загрузка завершена', registered:'SIP зарегистрирован', unregistered:'SIP снят с регистрации',
+  register_failed:'Ошибка регистрации', offhook:'Трубка снята', onhook:'Трубка положена',
+  incoming:'Входящий звонок', outgoing:'Исходящий звонок', established:'Разговор', terminated:'Звонок завершён',
+  open_dnd:'DND включён', close_dnd:'DND выключен',
+  always_fwd_on:'Переадресация всегда: вкл', always_fwd_off:'Переадресация всегда: выкл',
+  busy_fwd_on:'Переадресация при занятом: вкл', busy_fwd_off:'Переадресация при занятом: выкл',
+  noanswer_fwd_on:'Переадресация без ответа: вкл', noanswer_fwd_off:'Переадресация без ответа: выкл',
+  transfer_call:'Перевод звонка', blind_transfer:'Слепой перевод', attended_transfer:'Перевод с консультацией',
+  transfer_failed:'Перевод не удался', transfer_finished:'Перевод завершён', forward_incoming:'Входящий переадресован',
+  hold:'Удержание', unhold:'Снято с удержания', mute:'Микрофон выключен', unmute:'Микрофон включён',
+  missed_call:'Пропущенный звонок', ip_changed:'Сменился IP', idle_to_busy:'Линия занята', busy_to_idle:'Линия свободна',
+  reject_incoming:'Входящий отклонён', answer_new_incoming:'Ответ на новый входящий',
+  autop_finish:'Автопровижн завершён', callwaiting_on:'Ожидание вызова: вкл', callwaiting_off:'Ожидание вызова: выкл',
+  headset:'Гарнитура', handsfree:'Громкая связь', cancel_callout:'Исходящий отменён',
+  remote_busy:'Абонент занят', remote_canceled:'Абонент сбросил звонок',
+  peripheral_info:'Данные периферии', vpn_ip:'VPN IP',
+};
+const END_EVENTS = ['terminated','remote_busy','remote_canceled','cancel_callout'];
+// Клавиши телефона по группам: [подпись, значение для servlet]
+const KEY_GROUPS = [
+  ['Набор', [['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0'],['*','*'],['#','POUND']]],
+  ['Навигация', [['▲ Вверх','UP'],['▼ Вниз','DOWN'],['◀ Влево','LEFT'],['▶ Вправо','RIGHT'],['OK','OK'],['ENTER','ENTER'],['Назад / отмена','CANCEL']]],
+  ['Звонок', [['Громкая связь','HANDFREE'],['Микрофон (mute)','MUTE'],['Удержание','F_HOLD'],['Перевод','F_TRANSFER'],
+              ['Конференция','F_CONFERENCE'],['Гарнитура','HEADSET'],['Повтор набора','RD'],['Сообщения','MSG']]],
+  ['Softkeys', [['F1','F1'],['F2','F2'],['F3','F3'],['F4','F4']]],
+  ['Громкость и DND', [['Громче','VOLUME_UP'],['Тише','VOLUME_DOWN'],['DND вкл','DNDOn'],['DND выкл','DNDOff']]],
+  ['Линии и DSS', [['L1','L1'],['L2','L2'],['L3','L3'],['L4','L4'],['L5','L5'],['L6','L6'],
+                   ['D1','D1'],['D2','D2'],['D3','D3'],['D4','D4'],['D5','D5'],['D6','D6']]],
+];
+const FILTERS = [['all','Все'],['todo','Не обзвонены'],['done','Обзвонены'],['comment','С комментарием АКЦ'],['nophone','Без номера']];
+const SAVE_KEY = 'autodozvon.mapping';
+const DEFAULT_KEY2 = 'Ключ клиента';
+const KEYPAD = ['1','2','3','4','5','6','7','8','9','*','0','#'];
+const TABLE_LIMIT = 300;
+const NAME_RX = /фио|клиент|имя|наименован|фамил/i;
+const PHONE_RX = /тел|phone|моб/i;
+const KEY_RX = /ключ|договор|полис|id|код|номер клиента/i;
+// Ключевые данные карточки в порядке важности: первое совпадение по каждому правилу
+const FACT_RX = [/полис|договор/i, /сумма|премия|стоимост|цена/i, /срок|дата|окончан|начал/i,
+                 /марка|модель|автомоб|авто|гос|vin/i, /регион|город|адрес/i, /агент|менеджер|филиал|отдел/i];
+
+const S = {
+  wb1:null, wb2:null, t1:null, t2:null,
+  key1:'', phone1:'', key2:'', comment2:'',
+  result2:'Результат обзвона', note2:'Комментарий оператора', date2:'Дата обзвона',
+  index2:new Map(), filter:'all', search:'', visible:[], queue:[], qpos:0, cur:null,
+  lastEvent:0, callStart:0, callEnd:0, dirty:false,
+};
+
+const $ = id => document.getElementById(id);
+const norm = v => String(v ?? '').replace(/\s+/g,' ').trim();
+const keyOf = v => norm(v).toLowerCase();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad2 = n => String(n).padStart(2,'0');
+
+// Набор номера: 11 цифр с +7 или 8 -> 8XXXXXXXXXX, 10 цифр -> 8XXXXXXXXXX. Под вашу схему набора поправьте здесь.
+function toDialDigits(raw){
+  let d = String(raw ?? '').replace(/\D/g,'');
+  if (d.length === 11 && (d[0] === '7' || d[0] === '8')) d = '8' + d.slice(1);
+  else if (d.length === 10) d = '8' + d;
+  return d;
+}
+function fmtTime(ms){ const s = Math.floor(ms / 1000); return pad2(Math.floor(s / 60)) + ':' + pad2(s % 60); }
+function today(){ return new Date().toISOString().slice(0,10); }
+function pickHeader(headers, preferred, rx){
+  if (preferred && headers.includes(preferred)) return preferred;
+  return headers.find(h => rx.test(h)) || headers[0] || '';
+}
+function fillSelect(sel, items, value, emptyLabel){
+  sel.innerHTML = '';
+  if (emptyLabel !== undefined) sel.add(new Option(emptyLabel, ''));
+  items.forEach(h => sel.add(new Option(h, h)));
+  sel.value = items.includes(value) ? value : (emptyLabel !== undefined ? '' : (items[0] || ''));
+  sel.disabled = items.length === 0;
+}
+function fillSheets(sel, wb){
+  sel.innerHTML = '';
+  wb.SheetNames.forEach(n => sel.add(new Option(n, n)));
+  sel.disabled = false;
+}
+
+/* ---------- Чтение Excel: порт из macro-builder/excel-import.js ---------- */
+// Текст ячейки так, как его видно в Excel. Длинные целые (телефон, ИНН) в «Общем» формате
+// берём целиком: Excel в узком столбце показывает их как 8,9E+10.
+function cellText(cell){
+  if (!cell || cell.v === undefined || cell.v === null) return '';
+  let shown;
+  if (cell.w !== undefined && cell.w !== null) shown = String(cell.w);
+  else if (XLSX.utils.format_cell) shown = String(XLSX.utils.format_cell(cell));
+  else shown = String(cell.v);
+  if (cell.t === 'n' && cell.z && shown === String(cell.v) && XLSX.SSF && XLSX.SSF.is_date && XLSX.SSF.is_date(cell.z)) {
+    const d = XLSX.SSF.parse_date_code(cell.v);
+    if (d) shown = `${pad2(d.d)}.${pad2(d.m)}.${d.y}` + (d.H || d.M ? ` ${pad2(d.H)}:${pad2(d.M)}` : '');
+  }
+  if (cell.t === 'n' && Number.isInteger(cell.v) && Math.abs(cell.v) < 1e21 && (!cell.z || cell.z === 'General') && /E[+-]?\d+$/i.test(shown)) {
+    return String(cell.v);
+  }
+  return shown;
+}
+// Непустые строки листа с номерами строк Excel
+function sheetLines(ws){
+  if (!ws || !ws['!ref']) return [];
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const lines = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const cells = []; let blank = true;
+    for (let c = 0; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({r, c})];
+      if (cell && cell.v !== undefined && cell.v !== null) blank = false;
+      cells.push(cellText(cell));
+    }
+    if (!blank) lines.push({cells, rowNum: r + 1});
+  }
+  return lines;
+}
+// Первая непустая строка — заголовки. Строки данных хранят номер строки Excel в __row
+function parseSheet(wb, name){
+  const lines = sheetLines(wb.Sheets[name]);
+  if (!lines.length) return {headers:[], rows:[]};
+  const headers = [];
+  lines[0].cells.forEach((h, i) => {
+    let n = norm(h) || `Столбец ${i+1}`, base = n, k = 2;
+    while (headers.includes(n)) n = `${base} (${k++})`;
+    headers.push(n);
+  });
+  const rows = lines.slice(1).map(l => {
+    const o = {__row: l.rowNum};
+    headers.forEach((h, i) => o[h] = l.cells[i] ?? '');
+    return o;
+  });
+  return {headers, rows};
+}
+function downloadXlsx(headers, rows, name){
+  const aoa = [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Лист1');
+  XLSX.writeFile(wb, name);
+}
+
+/* ---------- Выбор колонок запоминается (только имена столбцов) ---------- */
+function saveMapping(){
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      key1:S.key1, phone1:S.phone1, key2:S.key2, comment2:S.comment2,
+      result2:S.result2, note2:S.note2, date2:S.date2,
+    }));
+  } catch (e) { /* хранилище недоступно: не запоминаем */ }
+}
+function loadMapping(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; }
+}
+const saved0 = loadMapping();
+S.key1 = saved0.key1 || ''; S.phone1 = saved0.phone1 || '';
+S.key2 = saved0.key2 || DEFAULT_KEY2; S.comment2 = saved0.comment2 || '';
+S.result2 = saved0.result2 || S.result2; S.note2 = saved0.note2 || S.note2; S.date2 = saved0.date2 || S.date2;
+$('result2').value = S.result2; $('note2').value = S.note2; $('date2').value = S.date2;
+
+/* ---------- База 1 ---------- */
+$('f1').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  S.wb1 = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true, cellNF:true});
+  fillSheets($('sh1'), S.wb1);
+  onSheet1();
+});
+$('sh1').addEventListener('change', onSheet1);
+function onSheet1(){
+  if (!S.wb1) return;
+  S.t1 = parseSheet(S.wb1, $('sh1').value);
+  const h = S.t1.headers;
+  S.key1 = pickHeader(h, S.key1, KEY_RX);
+  S.phone1 = pickHeader(h, S.phone1, PHONE_RX);
+  fillSelect($('key1'), h, S.key1);
+  fillSelect($('phone1'), h, S.phone1);
+  $('m1').textContent = `Строк: ${S.t1.rows.length}, столбцов: ${h.length}`;
+  saveMapping();
+  buildIndex();
+  renderOverview();
+}
+$('key1').addEventListener('change', e => { S.key1 = e.target.value; saveMapping(); buildIndex(); renderOverview(); });
+$('phone1').addEventListener('change', e => { S.phone1 = e.target.value; saveMapping(); renderOverview(); });
+
+/* ---------- База 2 ---------- */
+$('f2').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  S.wb2 = XLSX.read(await f.arrayBuffer(), {type:'array', cellDates:true, cellNF:true});
+  fillSheets($('sh2'), S.wb2);
+  onSheet2();
+});
+$('sh2').addEventListener('change', onSheet2);
+function onSheet2(){
+  if (!S.wb2) return;
+  S.t2 = parseSheet(S.wb2, $('sh2').value);
+  const h = S.t2.headers;
+  S.key2 = pickHeader(h, S.key2, KEY_RX);
+  S.comment2 = h.includes(S.comment2) ? S.comment2 : (h.find(x => /коммент/i.test(x)) || '');
+  fillSelect($('key2'), h, S.key2);
+  fillSelect($('comment2'), h, S.comment2, '— не показывать —');
+  $('m2').textContent = `Строк: ${S.t2.rows.length}, столбцов: ${h.length}`;
+  ensureT2();
+  saveMapping();
+}
+$('key2').addEventListener('change', e => { S.key2 = e.target.value; saveMapping(); ensureT2(); });
+$('comment2').addEventListener('change', e => { S.comment2 = e.target.value; saveMapping(); renderOverview(); });
+[['result2',$('result2')],['note2',$('note2')],['date2',$('date2')]].forEach(([name, el]) => {
+  el.addEventListener('change', () => { S[name] = norm(el.value) || S[name]; el.value = S[name]; saveMapping(); ensureT2(); });
+});
+
+// База 2 может отсутствовать: таблица результатов создаётся пустой
+function ensureT2(){
+  if (!S.t2) S.t2 = {headers:[], rows:[]};
+  [S.key2, S.result2, S.note2, S.date2].forEach(h => {
+    if (h && !S.t2.headers.includes(h)) {
+      S.t2.headers.push(h);
+      S.t2.rows.forEach(r => r[h] = '');
+    }
+  });
+  const list = $('hdr2');
+  list.innerHTML = '';
+  S.t2.headers.forEach(h => list.appendChild(new Option(h, h)));
+  buildIndex();
+  $('m2').textContent = `Строк: ${S.t2.rows.length}, столбцов: ${S.t2.headers.length}`;
+}
+function buildIndex(){
+  S.index2 = new Map();
+  if (!S.t2) return;
+  S.t2.rows.forEach(r => {
+    const k = keyOf(r[S.key2]);
+    if (k && !S.index2.has(k)) S.index2.set(k, r);
+  });
+}
+$('exportBtn').addEventListener('click', exportResults);
+$('cExport').addEventListener('click', exportResults);
+function exportResults(){
+  ensureT2();
+  downloadXlsx(S.t2.headers, S.t2.rows, `результаты_обзвона_${today()}.xlsx`);
+  S.dirty = false;
+  $('exportInfo').textContent = `Файл сохранён. Записей с результатом: ${doneCount()}`;
+}
+function doneCount(){
+  if (!S.t2) return 0;
+  return S.t2.rows.filter(r => norm(r[S.result2])).length;
+}
+window.addEventListener('beforeunload', e => {
+  if (S.dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- Навигация ---------- */
+document.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => showStage(b.dataset.stage)));
+function showStage(name){
+  ['data','overview','phone','compare'].forEach(s => $('stage-' + s).classList.toggle('hidden', s !== name));
+  document.querySelectorAll('button[data-stage]').forEach(b => {
+    b.className = b.dataset.stage === name ? 'btn-primary' : 'btn-secondary';
+  });
+  if (name === 'overview') renderOverview();
+  if (name === 'phone') renderLogs();
+}
+
+/* ---------- Обзор базы ---------- */
+// Статус строки: результат и комментарий берутся из базы 2 по ключу клиента
+function rowInfo(r){
+  const k = keyOf(r[S.key1]);
+  const row2 = k ? S.index2.get(k) || null : null;
+  return {
+    row2,
+    res: row2 ? norm(row2[S.result2]) : '',
+    comment: row2 && S.comment2 ? norm(row2[S.comment2]) : '',
+    noPhone: !norm(r[S.phone1]),
+    done: !!(row2 && norm(row2[S.result2])),
+  };
+}
+function passesFilter(info){
+  switch (S.filter) {
+    case 'todo': return !info.done && !info.noPhone;
+    case 'done': return info.done;
+    case 'comment': return !!info.comment;
+    case 'nophone': return info.noPhone;
+    default: return true;
+  }
+}
+// Клиенты, которые видны в обзоре (с учётом фильтра и поиска): по ним идёт прозвон
+function visibleRows(){
+  if (!S.t1) return [];
+  const q = S.search.toLowerCase();
+  return S.t1.rows.filter(r => {
+    if (!keyOf(r[S.key1])) return false;
+    if (!passesFilter(rowInfo(r))) return false;
+    if (q && !S.t1.headers.some(h => norm(r[h]).toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+function renderFilters(){
+  const box = $('ovFilters');
+  if (box.childElementCount) return;
+  FILTERS.forEach(([id, label]) => {
+    const b = document.createElement('button');
+    b.className = 'btn-secondary btn-small';
+    b.dataset.filter = id;
+    b.textContent = label;
+    b.addEventListener('click', () => { S.filter = id; renderOverview(); });
+    box.appendChild(b);
+  });
+}
+$('ovSearch').addEventListener('input', e => { S.search = e.target.value; renderOverview(); });
+$('ovStart').addEventListener('click', () => openCall(0));
+$('ovBody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]');
+  if (b) openCall(Number(b.dataset.i));
+});
+$('openCall').addEventListener('click', () => openCall(0));
+
+function renderOverview(){
+  renderFilters();
+  document.querySelectorAll('#ovFilters button').forEach(b => b.classList.toggle('active', b.dataset.filter === S.filter));
+  if (!S.t1) {
+    $('ovStats').innerHTML = '';
+    $('ovHead').innerHTML = '';
+    $('ovBody').innerHTML = '';
+    $('ovNote').textContent = 'Сначала загрузите базу 1 на вкладке «Данные».';
+    S.visible = [];
+    return;
+  }
+  buildIndex();
+  let total = 0, done = 0, todo = 0, comments = 0, nophone = 0;
+  S.t1.rows.forEach(r => {
+    if (!keyOf(r[S.key1])) return;
+    total++;
+    const info = rowInfo(r);
+    if (info.done) done++;
+    else if (info.noPhone) nophone++;
+    else todo++;
+    if (info.comment) comments++;
+  });
+  $('ovStats').innerHTML = [
+    ['Клиентов', total, ''], ['Обзвонены', done, 'ok'], ['Не обзвонены', todo, 'warn'],
+    ['С комментарием АКЦ', comments, 'info'], ['Без номера', nophone, 'bad'],
+  ].map(([l, n, c]) => `<div class="stat ${c}"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
+
+  S.visible = visibleRows();
+  const cols = S.t1.headers;
+  $('ovHead').innerHTML = '<tr><th></th><th>Строка</th><th>Статус</th>' +
+    cols.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>';
+  const shown = S.visible.slice(0, TABLE_LIMIT);
+  $('ovBody').innerHTML = shown.map((r, i) => {
+    const info = rowInfo(r);
+    const badge = info.done ? `<span class="badge ok">${esc(info.res)}</span>`
+      : info.noPhone ? '<span class="badge bad">нет номера</span>'
+      : '<span class="badge warn">не обзвонен</span>';
+    const cells = cols.map(h => `<td title="${esc(norm(r[h]))}">${esc(norm(r[h]))}</td>`).join('');
+    return `<tr><td><button class="btn-secondary btn-small" data-i="${i}">Прозвон</button></td>` +
+      `<td class="rownum">${r.__row}</td><td>${badge}</td>${cells}</tr>`;
+  }).join('') || '<tr><td class="empty-state" colspan="99">Нет клиентов под этот фильтр</td></tr>';
+  $('ovNote').textContent = `Показано ${shown.length} из ${S.visible.length}` +
+    (S.visible.length > TABLE_LIMIT ? ' — сузьте фильтр или поиск, чтобы увидеть остальных' : '') +
+    '. «Прозвон» начинает обзвон с этой строки по текущему списку.';
+}
+
+/* ---------- Сверка двух баз ---------- */
+$('runCompare').addEventListener('click', runCompare);
+function runCompare(){
+  if (!S.t1 || !S.t2) {
+    $('cmpResult').innerHTML = '<div class="card empty-state">Сначала загрузите базы на вкладке «Данные».</div>';
+    return;
+  }
+  const group = (t, keyName) => {
+    const m = new Map();
+    t.rows.forEach(r => {
+      const k = keyOf(r[keyName]);
+      if (!k) return;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    return m;
+  };
+  const m1 = group(S.t1, S.key1), m2 = group(S.t2, S.key2);
+  const only1 = [], only2 = [], both = [];
+  m1.forEach((rows, k) => { if (m2.has(k)) both.push(k); else only1.push(...rows); });
+  m2.forEach((rows, k) => { if (!m1.has(k)) only2.push(...rows); });
+  const dup1 = [...m1.values()].filter(a => a.length > 1).length;
+  const dup2 = [...m2.values()].filter(a => a.length > 1).length;
+
+  const skipCols = [S.result2, S.note2, S.date2];
+  const common = S.t1.headers.filter(h => S.t2.headers.includes(h) && !skipCols.includes(h));
+  const diffs = [];
+  both.forEach(k => {
+    const a = m1.get(k)[0], b = m2.get(k)[0];
+    common.forEach(h => {
+      if (norm(a[h]) !== norm(b[h])) diffs.push({key:k, col:h, v1:norm(a[h]), v2:norm(b[h])});
+    });
+  });
+  const rowsHtml = (list, cols, limit = TABLE_LIMIT) => list.slice(0, limit).map(r =>
+    '<tr>' + cols.map(c => `<td>${esc(norm(r[c]))}</td>`).join('') + '</tr>').join('');
+
+  $('cmpResult').innerHTML = `
+    <div class="card">
+      <div class="summary">
+        <div class="sum-stat"><b>${m1.size}</b><span>Ключей в базе 1</span></div>
+        <div class="sum-stat"><b>${both.length}</b><span>Совпало по ключу</span></div>
+        <div class="sum-stat"><b>${only1.length}</b><span>Только в базе 1</span></div>
+        <div class="sum-stat"><b>${only2.length}</b><span>Только в базе 2</span></div>
+        <div class="sum-stat"><b>${diffs.length}</b><span>Расхождений в значениях</span></div>
+      </div>
+      <div class="status-msg">Дубликатов ключа: в базе 1 — ${dup1}, в базе 2 — ${dup2}</div>
+      <div class="actions" style="margin:12px 0 0">
+        <button class="btn-secondary" id="dl1" ${only1.length ? '' : 'disabled'}>Скачать «только в базе 1»</button>
+        <button class="btn-secondary" id="dl2" ${only2.length ? '' : 'disabled'}>Скачать «только в базе 2»</button>
+      </div>
+    </div>
+    <div class="file-meta" style="margin:6px 0">Только в базе 1 (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr>${S.t1.headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rowsHtml(only1, S.t1.headers) || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>
+    <div class="file-meta" style="margin:6px 0">Только в базе 2 (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr>${S.t2.headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rowsHtml(only2, S.t2.headers) || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>
+    <div class="file-meta" style="margin:6px 0">Расхождения у совпавших ключей (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr><th>Ключ</th><th>Столбец</th><th>База 1</th><th>База 2</th></tr></thead>
+      <tbody>${diffs.slice(0, TABLE_LIMIT).map(d => `<tr><td>${esc(d.key)}</td><td>${esc(d.col)}</td><td>${esc(d.v1)}</td><td>${esc(d.v2)}</td></tr>`).join('') || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>`;
+
+  $('dl1').onclick = () => downloadXlsx(S.t1.headers, only1, `только_в_базе1_${today()}.xlsx`);
+  $('dl2').onclick = () => downloadXlsx(S.t2.headers, only2, `только_в_базе2_${today()}.xlsx`);
+}
+
+/* ---------- Прозвон ---------- */
+RESULTS.forEach(r => {
+  const b = document.createElement('button');
+  b.className = 'btn-secondary';
+  b.innerHTML = `<kbd>${r.hot}</kbd>${r.label}`;
+  b.addEventListener('click', () => saveResult(r));
+  $('resultBar').appendChild(b);
+});
+KEYPAD.forEach(k => {
+  const b = document.createElement('button');
+  b.textContent = k;
+  b.addEventListener('click', () => sendKey(k));
+  $('keypad').appendChild(b);
+});
+
+$('cExit').addEventListener('click', closeCall);
+$('cPrev').addEventListener('click', () => show(S.qpos - 1));
+$('cNext').addEventListener('click', () => show(S.qpos + 1));
+$('bSkip').addEventListener('click', () => show(S.qpos + 1));
+$('bDial').addEventListener('click', dial);
+$('bHang').addEventListener('click', () => sendKey('CANCEL'));
+$('bSpeaker').addEventListener('click', () => sendKey('SPEAKER'));
+$('bCopy').addEventListener('click', () => {
+  const text = S.cur ? norm(S.cur[S.phone1]) : '';
+  if (text && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+});
+
+document.addEventListener('keydown', e => {
+  if ($('call').classList.contains('hidden')) return;
+  if (['TEXTAREA','INPUT','SELECT'].includes(e.target.tagName)) return;
+  if (e.key === 'Escape') return closeCall();
+  if (e.key === 'ArrowRight') return show(S.qpos + 1);
+  if (e.key === 'ArrowLeft') return show(S.qpos - 1);
+  const r = RESULTS.find(x => x.hot === e.key);
+  if (r) saveResult(r);
+});
+
+async function openCall(start = 0){
+  if (!S.t1 || !S.key1 || !S.phone1) {
+    alert('Сначала загрузите базу 1 и выберите ключ и столбец с телефоном на вкладке «Данные».');
+    return;
+  }
+  renderOverview();
+  if (!S.visible.length) { alert('В текущем фильтре нет клиентов для обзвона.'); return; }
+  ensureT2();
+  S.queue = S.visible.slice();
+  document.body.classList.add('call-open');
+  $('call').classList.remove('hidden');
+  await syncEvents(true);
+  show(start);
+}
+function closeCall(){
+  $('call').classList.add('hidden');
+  document.body.classList.remove('call-open');
+  showStage('overview');
+}
+
+function show(pos){
+  pos = Math.max(0, pos);
+  if (!S.queue.length || pos >= S.queue.length) {
+    S.qpos = S.queue.length; // «Назад» из конца вернёт на последнего клиента
+    S.cur = null;
+    $('cPos').textContent = S.queue.length ? 'Список обзвона закончился' : 'Нет клиентов для обзвона';
+    $('cProgress').style.width = S.queue.length ? '100%' : '0';
+    ['cName','cMeta','cPhone','cComment','cPrevResult','cErr'].forEach(id => $(id).textContent = '');
+    $('cFacts').innerHTML = ''; $('cFields').textContent = ''; $('cMore').textContent = '';
+    $('cCommentBox').classList.add('empty');
+    $('cNote').value = '';
+    return;
+  }
+  S.qpos = pos;
+  const r = S.queue[pos];
+  S.cur = r;
+  const info = rowInfo(r);
+  const key = norm(r[S.key1]);
+
+  $('cPos').textContent = `Клиент ${pos + 1} из ${S.queue.length}`;
+  $('cProgress').style.width = `${((pos + 1) / S.queue.length) * 100}%`;
+
+  // Что важнее всего: имя и телефон, затем ключевые данные, комментарий, остальное
+  const used = new Set([S.key1, S.phone1]);
+  const nameH = S.t1.headers.find(h => !used.has(h) && NAME_RX.test(h)) || '';
+  if (nameH) used.add(nameH);
+  const facts = [];
+  FACT_RX.forEach(rx => {
+    if (facts.length >= 6) return;
+    const h = S.t1.headers.find(x => !used.has(x) && rx.test(x) && norm(r[x]));
+    if (h) { used.add(h); facts.push({h, v: norm(r[h])}); }
+  });
+  const rest = S.t1.headers.filter(h => !used.has(h) && norm(r[h])).map(h => ({h, v: norm(r[h])}));
+
+  $('cName').textContent = nameH ? norm(r[nameH]) : `Клиент ${key}`;
+  $('cName').title = $('cName').textContent;
+  $('cMeta').textContent = `Ключ ${key} · строка Excel ${r.__row}` + (info.done ? ` · уже обзвонен: ${info.res}` : '');
+  $('cPhone').textContent = norm(r[S.phone1]) || '— нет номера —';
+
+  const factBox = $('cFacts');
+  factBox.innerHTML = '';
+  facts.forEach(f => {
+    const d = document.createElement('div'); d.className = 'fact';
+    const k = document.createElement('span'); k.className = 'fk'; k.textContent = f.h; k.title = f.h;
+    const v = document.createElement('span'); v.className = 'fv'; v.textContent = f.v; v.title = f.v;
+    d.append(k, v);
+    factBox.appendChild(d);
+  });
+
+  $('cComment').textContent = info.comment || 'Комментариев нет';
+  $('cComment').parentElement.title = info.comment;
+  $('cCommentBox').classList.toggle('empty', !info.comment);
+
+  const box = $('cFields');
+  box.textContent = '';
+  rest.forEach(f => {
+    const row = document.createElement('div'); row.className = 'field';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = f.h; k.title = f.h;
+    const v = document.createElement('span'); v.className = 'v'; v.textContent = f.v; v.title = f.v;
+    row.append(k, v);
+    box.appendChild(row);
+  });
+  fitFields();
+
+  $('cPrevResult').textContent = info.done
+    ? `Уже записано: ${info.res}${info.row2 && info.row2[S.date2] ? ' (' + info.row2[S.date2] + ')' : ''}` : '';
+  $('cNote').value = info.row2 ? norm(info.row2[S.note2]) : '';
+  $('cErr').textContent = info.noPhone ? 'В этой строке нет номера, набрать нельзя.' : '';
+  renderAdvBox(r, info);
+}
+
+// Прячем поля с конца, пока блок не перестанет переполняться: листать экран не нужно
+function fitFields(){
+  const box = $('cFields'), more = $('cMore');
+  const items = [...box.querySelectorAll('.field')];
+  items.forEach(i => i.classList.remove('hidden'));
+  more.textContent = '';
+  let shown = items.length;
+  if (document.body.classList.contains('advanced')) return; // в расширенном режиме показываем всё
+  while (shown > 0 && box.scrollHeight > box.clientHeight + 1) {
+    items[--shown].classList.add('hidden');
+    more.textContent = `Не вместились в экран: ${items.length - shown}`;
+  }
+}
+window.addEventListener('resize', () => {
+  if (S.cur && !$('call').classList.contains('hidden')) fitFields();
+});
+
+/* ---------- Телефон ---------- */
+async function api(url){
+  const r = await fetch(url, {cache:'no-store'});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.ok === false) throw new Error(data.message || `Ошибка ${r.status}`);
+  return data;
+}
+// Статус телефона показывается и в карточке прозвона, и в простом режиме
+function setState(text, tone){
+  ['cState', 'pState'].forEach(id => {
+    const el = $(id);
+    el.textContent = text;
+    el.className = 'phone-status' + (tone ? ' ' + tone : '');
+  });
+}
+async function dial(){
+  if (!S.cur) return;
+  const digits = toDialDigits(S.cur[S.phone1]);
+  if (!digits) { $('cErr').textContent = 'Нет номера для набора'; return; }
+  S.callStart = 0; S.callEnd = 0;
+  $('cTimer').textContent = '';
+  setState('Отправляю команду…', 'warn');
+  $('cErr').textContent = '';
+  try {
+    const data = await api(`/api/dial?num=${digits}`);
+    $('cErr').textContent = `${data.message} · набрано: ${digits}`;
+    logLine('cmd', `набор ${digits}: ${data.message}`);
+  } catch (err) {
+    setState('Ошибка набора', 'bad');
+    $('cErr').textContent = err.message;
+    logLine('cmd', `набор ${digits}: ${err.message}`);
+  }
+}
+async function sendKey(k, target = 'cErr'){
+  try {
+    await api(`/api/key?k=${encodeURIComponent(k)}`);
+    $(target).textContent = `Клавиша ${k} отправлена`;
+    logLine('cmd', `клавиша ${k}: отправлена`);
+  } catch (err) {
+    $(target).textContent = err.message;
+    logLine('cmd', `клавиша ${k}: ${err.message}`);
+  }
+}
+async function syncEvents(initial){
+  try {
+    const r = await fetch(`/api/events?after=${initial ? 0 : S.lastEvent}`, {cache:'no-store'});
+    const data = await r.json();
+    setServer(true);
+    if (initial) { S.lastEvent = data.last; return; }
+    data.events.forEach(handleEvent);
+    S.lastEvent = data.last;
+  } catch (err) {
+    setServer(false);
+  }
+}
+function handleEvent(ev){
+  const tone = ev.event === 'established' ? 'ok' : (END_EVENTS.includes(ev.event) ? 'warn' : '');
+  setState(EVENT_TEXT[ev.event] || ev.event, tone);
+  const who = ev.remote ? ` · абонент ${ev.remote}` : '';
+  logLine('event', `${EVENT_TEXT[ev.event] || ev.event} [${ev.event}]${who}`);
+  if (ev.event === 'outgoing') { S.callStart = 0; S.callEnd = 0; $('cTimer').textContent = ''; }
+  if (ev.event === 'established') { S.callStart = Date.now(); S.callEnd = 0; }
+  if (END_EVENTS.includes(ev.event) && S.callStart) S.callEnd = Date.now();
+}
+function setServer(ok){
+  const el = $('srv');
+  el.textContent = ok ? 'Сервер на связи' : 'Сервер не отвечает: запустите autodozvon.py';
+  el.className = 'badge ' + (ok ? 'ok' : 'bad');
+}
+setInterval(() => syncEvents(false), 800);
+setInterval(() => {
+  if (S.callStart && !S.callEnd) $('cTimer').textContent = fmtTime(Date.now() - S.callStart);
+  else if (S.callStart && S.callEnd) $('cTimer').textContent = fmtTime(S.callEnd - S.callStart);
+}, 500);
+fetch('/api/status', {cache:'no-store'}).then(r => setServer(r.ok)).catch(() => setServer(false));
+
+/* ---------- Журнал, клавиши телефона, простой и расширенный режимы ---------- */
+S.log = [];
+function logLine(kind, text){
+  S.log.push({t: new Date(), kind, text});
+  if (S.log.length > 500) S.log.shift();
+  renderLogs();
+}
+function renderLogs(){
+  const html = S.log.slice(-200).reverse().map(e =>
+    `<div><span class="t">${e.t.toLocaleTimeString('ru-RU')}</span>${esc(e.text)}</div>`).join('')
+    || '<div>Событий пока нет</div>';
+  ['pLog', 'cLog'].forEach(id => { if ($(id)) $(id).innerHTML = html; });
+}
+// Кнопки клавиш по группам; одни и те же группы в простом режиме и в расширенном прозвоне
+function buildKeyGroups(container, onKey){
+  container.innerHTML = '';
+  KEY_GROUPS.forEach(([title, keys]) => {
+    const g = document.createElement('div'); g.className = 'keygroup';
+    const t = document.createElement('div'); t.className = 'gt'; t.textContent = title;
+    const grid = document.createElement('div'); grid.className = 'keygrid';
+    keys.forEach(([label, value]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = `key=${value}`;
+      b.addEventListener('click', () => onKey(value));
+      grid.appendChild(b);
+    });
+    g.append(t, grid);
+    container.appendChild(g);
+  });
+}
+// Список разрешённых клавиш берём с сервера, чтобы UI и сервер не расходились
+async function loadKeys(){
+  try {
+    const data = await api('/api/keys');
+    fillKeySelect(data.keys);
+  } catch (err) {
+    fillKeySelect(KEY_GROUPS.flatMap(g => g[1].map(k => k[1])));
+  }
+}
+function fillKeySelect(keys){
+  const sel = $('pKeySel');
+  sel.innerHTML = '';
+  keys.forEach(k => sel.add(new Option(k, k)));
+}
+async function phoneDial(){
+  const digits = String($('pNum').value).replace(/\D/g, '');
+  if (!digits) { $('pErr').textContent = 'Введите номер'; return; }
+  setState('Отправляю команду…', 'warn');
+  try {
+    const data = await api(`/api/dial?num=${digits}`);
+    $('pErr').textContent = data.message;
+    logLine('cmd', `набор ${digits}: ${data.message}`);
+  } catch (err) {
+    $('pErr').textContent = err.message;
+    logLine('cmd', `набор ${digits}: ${err.message}`);
+  }
+}
+// Расширенный режим: всё видно, поля не прячутся, справа журнал, клавиши и сырые данные
+function toggleAdvanced(){
+  const on = !document.body.classList.contains('advanced');
+  document.body.classList.toggle('advanced', on);
+  $('cAdvBox').classList.toggle('hidden', !on);
+  $('cAdv').textContent = on ? 'Обычный режим' : 'Расширенный режим';
+  if (S.cur) show(S.qpos);
+}
+function renderAdvBox(r, info){
+  $('cRaw').textContent = JSON.stringify({client: r, base2: info.row2 || null}, null, 2);
+  renderLogs();
+}
+buildKeyGroups($('pKeys'), k => sendKey(k, 'pErr'));
+buildKeyGroups($('cKeys'), k => sendKey(k, 'cErr'));
+$('pDial').addEventListener('click', phoneDial);
+$('pNum').addEventListener('keydown', e => { if (e.key === 'Enter') phoneDial(); });
+$('pHang').addEventListener('click', () => sendKey('CANCEL', 'pErr'));
+$('pKeySend').addEventListener('click', () => sendKey($('pKeySel').value, 'pErr'));
+$('cAdv').addEventListener('click', toggleAdvanced);
+loadKeys();
+
+/* ---------- Результат ---------- */
+function saveResult(item){
+  if (!S.cur) return;
+  const k = keyOf(S.cur[S.key1]);
+  if (!k) return;
+  let row = S.index2.get(k);
+  if (!row) {
+    row = {};
+    S.t2.headers.forEach(h => row[h] = '');
+    row[S.key2] = norm(S.cur[S.key1]);
+    S.t2.rows.push(row);
+    S.index2.set(k, row);
+  }
+  ensureT2();
+  row[S.result2] = item.value;
+  row[S.note2] = norm($('cNote').value);
+  row[S.date2] = new Date().toLocaleString('ru-RU');
+  S.dirty = true;
+  $('exportInfo').textContent = 'Есть несохранённые изменения. Скачайте базу 2.';
+  show(S.qpos + 1);
+}
+
+showStage('data');
+</script>
+</body>
+</html>
