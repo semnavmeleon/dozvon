@@ -816,9 +816,6 @@ function isCellColored(cell){
   const key = fillKey(cell);
   return !!key && (S.colorRules[key] || 'skip') === 'skip';
 }
-function isCellCommented(cell){
-  return !!(cell && Array.isArray(cell.c) && cell.c.length > 0);
-}
 // Палитра Excel «Заливка»: стандартные цвета и цвета темы с оттенками, как на скриншоте.
 // Тема Office 2007–2010 (индексы Excel: 0 фон 1, 1 текст 1, 2 фон 2, 3 текст 2, 4–9 акценты 1–6).
 // Тема в файле хранится внутри xlsx: если она другая, оттенки могут не совпасть.
@@ -970,13 +967,11 @@ function rowFillKey(r){
 function colorKeyOf(r){
   return S.colorSource === 'row' ? rowFillKey(r) : fillKey(resultCell(r));
 }
+// Строка обработана только по цвету: если её цвет помечен «Пропускать». Текст и комментарий не учитываются
 function processedReason(r){
   if (!S.resCol1) return '';
-  const cell = resultCell(r);
-  if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') return 'текст';
   const key = colorKeyOf(r);
   if (key && (S.colorRules[key] || 'skip') === 'skip') return 'цвет';
-  if (cell && isCellCommented(cell)) return 'комментарий';
   return '';
 }
 function rowInfo(r){
