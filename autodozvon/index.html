@@ -252,6 +252,8 @@
   #colorBox table td { white-space: normal; }
   #colorBox select { min-width: 180px; }
   #palAction { min-width: 180px; margin-bottom: 4px; }
+  .palbox { margin-top: 10px; }
+  .palbox summary { cursor: pointer; font-size: 13px; color: var(--text-muted); padding: 4px 0; }
   .xpal { display: grid; grid-template-columns: repeat(10, 26px); gap: 4px; margin-top: 8px; }
   .xpal-h { grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); margin-top: 6px; }
   .xpal-c { width: 26px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 2px; cursor: pointer; }
@@ -321,6 +323,11 @@
     <div class="card">
       <h2>Цвета заливки в «Результаты пролонгации»</h2>
       <div class="file-meta">Строка с цветом, который помечен «Пропускать», считается обработанной. Цвета, помеченные «Не пропускать», в прозвон идут. Неизвестный цвет по умолчанию пропускается.</div>
+      <div class="row"><label class="inline">Где искать заливку:
+        <select id="colorSource">
+          <option value="cell">в ячейке столбца результатов</option>
+          <option value="row">в любой ячейке строки</option>
+        </select></label></div>
       <div id="colorBox"><div class="status-msg">Выберите столбец результатов пролонгации</div></div>
       <div class="actions tight"><button class="btn-secondary" id="colorReset">Сбросить цвета</button></div>
     </div>
@@ -846,6 +853,7 @@ function colorInfo(key){
     const base = THEME_BASE[Number(idx)] || ['Тема ' + idx, 'BBBBBB'];
     return {label: `${base[0]}, ${tintName(t)}`, hex: tintHex(base[1], t)};
   }
+  if (key.startsWith('rgb:')) return {label: `Цвет #${key.slice(4)}`, hex: key.slice(4)};
   return {label: key, hex: 'BBBBBB'};
 }
 // Сколько строк результатов имеет каждый цвет заливки
@@ -853,7 +861,7 @@ function scanColors(){
   const counts = new Map();
   if (!S.t1 || !S.resCol1) return counts;
   S.t1.rows.forEach(r => {
-    const key = fillKey(resultCell(r));
+    const key = colorKeyOf(r);
     if (key) counts.set(key, (counts.get(key) || 0) + 1);
   });
   return counts;
@@ -869,6 +877,12 @@ function renderColorBox(){
   const counts = scanColors();
   const found = [...counts.keys()];
   let html = '';
+  if (S.t1 && S.resCol1) {
+    const inCell = S.t1.rows.filter(r => fillKey(resultCell(r))).length;
+    const inRow = S.t1.rows.filter(r => rowFillKey(r)).length;
+    html += `<div class="status-msg">Столбец «${esc(S.resCol1)}»: закрашено ячеек ${inCell}. ` +
+      `Строк с заливкой в любой ячейке: ${inRow}. Сейчас учитывается: ${S.colorSource === 'row' ? 'любая ячейка строки' : 'ячейка результата'}.</div>`;
+  }
   if (!S.t1 || !S.resCol1) {
     html += '<div class="status-msg">Выберите столбец результатов пролонгации на вкладке «Данные»</div>';
   } else if (!found.length) {
@@ -885,7 +899,7 @@ function renderColorBox(){
     });
     html += '</tbody></table>';
   }
-  html += '<div class="sec-h mt">Палитра Excel: нажмите цвет, чтобы назначить действие</div>';
+  html += '<details class="palbox"><summary>Палитра Excel: назначить цвет, которого нет в файле</summary>';
   // Действие палитры запоминаем отдельно: при перерисовке блока выбор не должен сбрасываться
   html += '<div class="row"><select id="palAction">' +
     `<option value="skip"${S.palAction === 'skip' ? ' selected' : ''}>Пропускать строку</option>` +
@@ -911,6 +925,7 @@ function renderColorBox(){
   html += '</div>';
   html += '<div class="status-msg">Обводка красная — цвет пропускается, зеленая — не пропускается. ' +
     'Цвета темы показаны для темы Office 2007–2010. Если в вашем файле другая тема, назначьте оттенок из таблицы «Цвет в файле».</div>';
+  html += '</details>';
   box.innerHTML = html;
   box.querySelectorAll('select[data-key]').forEach(sel => {
     sel.addEventListener('change', () => setColorRule(sel.dataset.key, sel.value));
@@ -921,6 +936,7 @@ function renderColorBox(){
   });
 }
 $('colorReset').addEventListener('click', () => { S.colorRules = {}; saveColors(); renderColorBox(); renderOverview(); });
+$('colorSource').addEventListener('change', e => { setColorSource(e.target.value); renderColorBox(); renderOverview(); });
 
 // Ячейка колонки результатов пролонгации в исходном файле (нужны стили и комментарии)
 function resultCell(r){
@@ -931,12 +947,34 @@ function resultCell(r){
   return ws ? ws[XLSX.utils.encode_cell({r: r.__row - 1, c})] || null : null;
 }
 // Почему строка уже обработана: '' — не обработана, иначе текст/цвет/комментарий
+// Цвет строки: из ячейки столбца результатов или из первой закрашенной ячейки строки (в зависимости от настройки)
+const COLOR_SOURCE_KEY = 'autodozvon.colorSource';
+S.colorSource = (() => { try { return localStorage.getItem(COLOR_SOURCE_KEY) || 'cell'; } catch (e) { return 'cell'; } })();
+function setColorSource(v){
+  S.colorSource = v;
+  try { localStorage.setItem(COLOR_SOURCE_KEY, v); } catch (e) { /* хранилище недоступно */ }
+}
+function rowFillKey(r){
+  if (!S.t1 || !S.sheet1 || !S.wb1) return null;
+  const ws = S.wb1.Sheets[S.sheet1];
+  if (!ws || !ws['!ref']) return null;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const key = fillKey(ws[XLSX.utils.encode_cell({r: r.__row - 1, c})]);
+    if (key) return key;
+  }
+  return null;
+}
+function colorKeyOf(r){
+  return S.colorSource === 'row' ? rowFillKey(r) : fillKey(resultCell(r));
+}
 function processedReason(r){
+  if (!S.resCol1) return '';
   const cell = resultCell(r);
-  if (!cell) return '';
-  if (cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') return 'текст';
-  if (isCellColored(cell)) return 'цвет';
-  if (isCellCommented(cell)) return 'комментарий';
+  if (cell && cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== '') return 'текст';
+  const key = colorKeyOf(r);
+  if (key && (S.colorRules[key] || 'skip') === 'skip') return 'цвет';
+  if (cell && isCellCommented(cell)) return 'комментарий';
   return '';
 }
 function rowInfo(r){
@@ -1537,6 +1575,7 @@ function saveResult(item){
   show(S.qpos + 1);
 }
 
+$('colorSource').value = S.colorSource;
 showStage('data');
 </script>
 </body>
