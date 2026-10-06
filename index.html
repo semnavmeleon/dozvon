@@ -1,0 +1,1620 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Автодозвон: обзвон клиентов</title>
+<script src="vendor/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f3f5fa;
+    --card-bg: #ffffff;
+    --border: #e0e4ee;
+    --border-soft: #f0f1f6;
+    --text: #1c2130;
+    --text-muted: #656c7a;
+    --text-faint: #98a0ae;
+    --primary: #2a6fdb;
+    --primary-dark: #1f57ad;
+    --primary-bg: #eaf1fd;
+    --success: #16803c;
+    --success-bg: #e9f9ef;
+    --warn: #b7791f;
+    --warn-bg: #fdf5e3;
+    --error: #c22032;
+    --error-bg: #fdecee;
+    --note-bg: #fff8e1;
+    --radius-lg: 10px;
+    --radius-md: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; line-height: 1.45;
+  }
+  body.call-open { overflow: hidden; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-size: 19px; font-weight: 700; margin: 0 0 4px; }
+  .subtitle { color: var(--text-muted); font-size: 13.5px; margin: 0 0 18px; }
+  .topnav { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+  .grow { flex: 1; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+  .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px 20px; }
+  .card h2 { font-size: 12.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--text-faint); margin: 0 0 14px; }
+  label { display: block; font-size: 12.5px; color: var(--text-muted); margin: 12px 0 4px; }
+  input[type=file] { display: block; width: 100%; font-size: 13px; color: var(--text-muted); }
+  select, input[type=text] {
+    width: 100%; font: inherit; font-size: 13.5px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text);
+  }
+  select:disabled { color: var(--text-faint); background: #f7f8fb; }
+  .file-meta { font-size: 12px; color: var(--text-faint); margin-top: 6px; min-height: 16px; }
+  .actions { margin: 14px 0 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button {
+    font: inherit; font-weight: 600; font-size: 13.5px; padding: 9px 16px;
+    border-radius: var(--radius-md); border: none; cursor: pointer;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-primary:disabled { background: #b9c6dd; cursor: not-allowed; }
+  .btn-secondary { background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #f5f6fa; }
+  .btn-secondary:disabled { color: var(--text-faint); cursor: not-allowed; }
+  .btn-secondary.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary-dark); }
+  .btn-small { padding: 4px 10px; font-size: 12.5px; }
+  .btn-call { background: var(--success); color: #fff; }
+  .btn-hang { background: var(--error); color: #fff; }
+  .status-msg { font-size: 13px; color: var(--text-muted); }
+  .status-line { font-size: 12px; color: var(--text-muted); min-height: 16px; word-break: break-word; }
+  input.search { max-width: 280px; }
+  .stat { flex: 1; min-width: 130px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 14px; }
+  .stat .num { font-size: 20px; font-weight: 700; }
+  .stat .lbl { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; }
+  .stat.ok .num { color: var(--success); }
+  .stat.warn .num { color: var(--warn); }
+  .stat.bad .num { color: var(--error); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .table-wrap {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    overflow: auto; max-height: 62vh; margin-bottom: 12px;
+  }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; white-space: nowrap; }
+  thead th {
+    position: sticky; top: 0; background: #f7f8fb; text-align: left; padding: 8px 10px;
+    border-bottom: 1px solid var(--border); font-weight: 700; color: var(--text-muted); z-index: 1;
+  }
+  tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: #f7f9fd; }
+  td.rownum { color: var(--text-faint); text-align: right; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+  .badge.ok { background: var(--success-bg); color: var(--success); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.bad { background: var(--error-bg); color: var(--error); }
+  .badge.info { background: var(--primary-bg); color: var(--primary-dark); }
+  .empty-state { padding: 36px 20px; text-align: center; color: var(--text-faint); font-size: 13.5px; }
+  .hidden { display: none !important; }
+  .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .sum-stat { background: var(--bg); border-radius: var(--radius-md); padding: 10px 14px; min-width: 150px; }
+  .sum-stat b { font-size: 20px; display: block; }
+  .sum-stat span { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; }
+
+  /* Полноэкранный прозвон. Клиент на первом месте, всё помещается в окно без прокрутки */
+  #call { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; }
+  .progress { flex: 0 1 220px; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--primary); transition: width .2s; }
+  .col { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px 18px; min-height: 0; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .cl-name { font-size: clamp(22px, 3.8vh, 32px); font-weight: 700; line-height: 1.15; word-break: break-word; }
+  .cl-meta { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; word-break: break-word; }
+  .cl-phone { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 10px 0 12px; }
+  .cl-phone .num { font-size: clamp(24px, 4.4vh, 38px); font-weight: 700; letter-spacing: .3px; color: var(--primary-dark); white-space: nowrap; }
+  .fact { background: var(--bg); border-radius: var(--radius-md); padding: 6px 10px; min-width: 0; }
+  .fact .fk { display: block; font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; word-break: break-word; }
+  .fact .fv { display: block; font-size: 14px; font-weight: 600; word-break: break-word; }
+  .comment { background: var(--note-bg); border: 1px solid #f1e3a6; border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 12px; flex: 0 0 auto; max-height: 30%; overflow: hidden; }
+  .comment .lbl { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 4px; }
+  .comment.empty { background: #f7f8fb; border-color: var(--border); }
+  #cComment { font-size: 13.5px; word-break: break-word; }
+  .sec-h { font-size: 11px; font-weight: 700; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin: 4px 0; }
+  .field { display: flex; gap: 8px; min-width: 0; padding: 3px 0; border-bottom: 1px solid var(--border-soft); flex: 0 0 auto; font-size: 13px; }
+  .field .k { flex: 0 0 36%; color: var(--text-muted); word-break: break-word; }
+  .field .v { flex: 1; min-width: 0; word-break: break-word; }
+  .more { font-size: 12px; color: var(--text-faint); min-height: 16px; margin-top: 4px; }
+  .phone-status { font-size: 18px; font-weight: 700; padding: 8px; border-radius: var(--radius-md); background: #f7f8fb; text-align: center; word-break: break-word; }
+  .phone-status.ok { color: var(--success); background: var(--success-bg); }
+  .phone-status.warn { color: var(--warn); background: var(--warn-bg); }
+  .phone-status.bad { color: var(--error); background: var(--error-bg); }
+  .timer { font-size: 22px; text-align: center; height: 30px; line-height: 30px; margin: 2px 0; color: var(--text-muted); }
+  .note { flex: 1; min-height: 60px; resize: none; width: 100%; font: inherit; font-size: 13.5px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); }
+  .resultbar { display: flex; flex-wrap: nowrap; gap: 6px; padding: 10px 12px; background: var(--card-bg); border-top: 1px solid var(--border); min-width: 0; }
+  .resultbar button { flex: 1; min-width: 0; padding: 10px 6px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .resultbar button:hover { background: #f5f6fa; }
+  .resultbar kbd { font-size: 11px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; margin-right: 5px; color: var(--text-muted); }
+
+  /* Телефон: простой режим */
+  .phone-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .phone-grid { grid-template-columns: 1fr; } }
+  .phone-grid .card h2 { font-size: 12.5px; }
+  .dial-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .dial-row input, .dial-row select { flex: 1; min-width: 180px; }
+  .dial-row input { font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); }
+
+  /* Клавиши телефона: группы кнопок (используются и в простом, и в расширенном режимах) */
+  .keygroup { margin-bottom: 12px; }
+  .keygroup .gt { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
+  .keygrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 5px; }
+  .keygrid button { padding: 7px 6px; font-size: 13px; background: #fff; color: var(--text); border: 1px solid var(--border); }
+  .keygrid button:hover { background: #f5f6fa; }
+
+  /* Журнал событий */
+  .log { max-height: 320px; overflow: auto; font-size: 12px; font-family: Consolas, "Courier New", monospace; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fbfcfe; padding: 6px 8px; }
+  .log div { padding: 3px 0; border-bottom: 1px solid var(--border-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log .t { color: var(--text-faint); margin-right: 8px; }
+  .raw { font-size: 11.5px; background: #fbfcfe; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 8px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow: auto; margin: 0; }
+
+  /* Расширенный режим: дополнительные вкладки центральной панели, поля не прячутся */
+
+  /* Прозвон: раскладка по образцу АРМ. Шапка, слева «О клиенте», по центру вкладки и карточки, справа звонок и комментарии */
+  .call-head { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--card-bg); border-bottom: 1px solid var(--border); min-width: 0; }
+  .ch-title { font-weight: 700; font-size: 15px; white-space: nowrap; }
+  .ch-search { flex: 0 1 280px; min-width: 200px; padding: 7px 10px; font: inherit; font-size: 13.5px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; color: var(--text); }
+  .call-head .pos { font-weight: 600; font-size: 13px; white-space: nowrap; }
+  .call-head .progress { flex: 0 1 160px; }
+  .call-head button { padding: 7px 12px; font-size: 13px; white-space: nowrap; }
+  .arm { display: grid; grid-template-columns: 300px minmax(0, 1fr) 320px; gap: 12px; padding: 12px; min-height: 0; overflow: hidden; }
+  @media (max-width: 1280px) { .arm { grid-template-columns: 260px minmax(0, 1fr) 290px; } }
+  .arm > .col { min-height: 0; min-width: 0; overflow: hidden; }
+  .aside, .side { padding: 14px; }
+  .aside > * { flex-shrink: 0; }
+  .aside .kv { flex: 1 1 auto; min-height: 0; overflow: auto; }
+  .aside .cl-phone .num { font-size: 24px; }
+  .aside .cl-name { font-size: 22px; }
+  .main { padding: 0; }
+  .sec-h.mt { margin-top: 14px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .lock-warn { margin-top: 10px; font-size: 12.5px; padding: 8px 10px; border-radius: var(--radius-md); background: var(--warn-bg); color: var(--warn); border: 1px solid #f0dca8; }
+  .phones { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+  .phone-chip.active { background: var(--primary-bg); border-color: var(--primary); color: var(--primary-dark); font-weight: 700; }
+  #bNextPhone { margin-bottom: 8px; }
+  .kv { display: flex; flex-direction: column; border-top: 1px solid var(--border-soft); margin-top: 4px; }
+  .kv .fact { background: none; border-radius: 0; border-bottom: 1px solid var(--border-soft); padding: 7px 0; }
+  .kv .fact .fk { font-size: 11.5px; color: var(--text-muted); text-transform: none; letter-spacing: 0; }
+  .kv .fact .fv { font-size: 14px; font-weight: 600; margin-top: 2px; }
+  .ctabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding: 0 14px; flex: 0 0 auto; flex-wrap: wrap; background: var(--card-bg); }
+  .ctab { background: none; border: none; border-radius: 0; padding: 12px 12px 10px; font-size: 13.5px; color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .ctab:hover { background: none; color: var(--text); }
+  .ctab.active { color: var(--primary-dark); border-bottom-color: var(--primary); font-weight: 700; }
+  .tabpane { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 14px; overflow: hidden; }
+  #cFields { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 16px; }
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .tgrid .field { display: flex; flex-direction: column; gap: 2px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px; min-width: 0; }
+  .tgrid .field .k { flex: none; font-size: 11.5px; color: var(--text-muted); word-break: break-word; }
+  .tgrid .field .v { font-size: 15px; font-weight: 600; word-break: break-word; }
+  .table-wrap.small { max-height: 240px; margin-bottom: 12px; }
+  #pane-details table td { white-space: normal; }
+  #pane-history .log { flex: 1; max-height: none; }
+  body.advanced #cFields, body.advanced .tabpane { overflow: auto; }
+  .card-s { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 10px; }
+  .side .comment { margin-bottom: 10px; padding: 8px 12px; }
+  .phone-display { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+  .calc { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: 40px; gap: 6px; }
+  .calc-key { padding: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; background: #fff; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md); }
+  .calc-key:hover { background: #f5f6fa; }
+  .calc-key.sec { font-size: 13px; background: #f3f5fa; }
+  .calc-key.call { background: var(--success); border-color: var(--success); color: #fff; font-size: 13px; }
+  .calc-key.hang { background: var(--error); border-color: var(--error); color: #fff; font-size: 13px; }
+  .side .note { min-height: 48px; flex: 0 0 auto; }
+  label.inline { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--text); font-size: 13px; white-space: nowrap; }
+  label.inline input { width: auto; margin: 0; }
+
+  /* Полный текст строки: ничего не обрезаем, длинные списки прокручиваются внутри своей панели */
+  #ovBody td { white-space: normal; max-width: 280px; }
+  .layout-list td { white-space: normal; }
+  .layout-list select { width: 100%; min-width: 220px; }
+  .actions.tight { margin: 10px 0 0; }
+  .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border); vertical-align: middle; margin-right: 6px; }
+  #colorBox table td { white-space: normal; }
+  #colorBox select { min-width: 180px; }
+  #palAction { min-width: 180px; margin-bottom: 4px; }
+  .palbox { margin-top: 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .palbox summary { cursor: pointer; font-size: 13px; color: var(--text-muted); padding: 4px 0; }
+  .xpal { display: grid; grid-template-columns: repeat(10, 26px); gap: 4px; margin-top: 8px; }
+  .xpal-h { grid-column: 1 / -1; font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+  .xpal-c { width: 26px; height: 20px; padding: 0; border: 1px solid var(--border); border-radius: 2px; cursor: pointer; }
+  .xpal-c:hover { outline: 1px solid var(--text-muted); }
+  .xpal-c.skip { box-shadow: 0 0 0 2px var(--error); }
+  .xpal-c.ignore { box-shadow: 0 0 0 2px var(--success); }
+  .xpal-empty { width: 26px; height: 20px; }
+</style>
+
+</head>
+<body>
+<div class="page">
+  <h1>Автодозвон: обзвон клиентов</h1>
+  <p class="subtitle">Базы читаются в браузере и никуда не отправляются. Телефон Yealink набирает номера по команде со страницы.</p>
+
+  <div class="topnav">
+    <button class="btn-primary" data-stage="data">1. Данные</button>
+    <button class="btn-secondary" data-stage="overview">2. Обзор базы</button>
+    <button class="btn-secondary" data-stage="phone">Телефон: полное управление</button>
+    <button class="btn-secondary" data-stage="compare">3. Сверка</button>
+    <button class="btn-secondary" id="openCall">4. Прозвон на весь экран</button>
+    <span class="grow"></span>
+    <span id="srv" class="badge warn">Сервер: проверка…</span>
+  </div>
+
+  <!-- 1. Данные -->
+  <section id="stage-data">
+    <div class="cards">
+      <div class="card">
+        <h2>База 1 · источник номеров</h2>
+        <input type="file" id="f1" accept=".xlsx,.xls,.xlsm,.csv" aria-label="Файл базы 1">
+        <div class="file-meta" id="m1">Файл не загружен</div>
+        <label>Лист</label>
+        <select id="sh1" disabled></select>
+        <label>Ключ клиента (уникальный номер или ID)</label>
+        <select id="key1" disabled></select>
+        <label>Столбец с телефоном для набора</label>
+        <select id="phone1" disabled></select>
+        <label>Столбец «Результаты пролонгации»: цвет или комментарий в нём означает, что строка уже обработана</label>
+        <select id="resCol1" disabled></select>
+      </div>
+      <div class="card">
+        <h2>База 2 · результаты колл-центра</h2>
+        <input type="file" id="f2" accept=".xlsx,.xls,.xlsm,.csv" aria-label="Файл базы 2">
+        <div class="file-meta" id="m2">Необязательно: без базы 2 результаты пишутся в новый файл</div>
+        <label>Лист</label>
+        <select id="sh2" disabled></select>
+        <label>Ключ клиента в базе 2</label>
+        <select id="key2" disabled></select>
+        <label>Столбец комментария колл-центра (показывается в карточке)</label>
+        <select id="comment2" disabled></select>
+        <label>Столбец результата обзвона (создаётся, если нет)</label>
+        <input type="text" id="result2" list="hdr2">
+        <label>Столбец комментария оператора (создаётся, если нет)</label>
+        <input type="text" id="note2" list="hdr2">
+        <label>Столбец даты обзвона (создаётся, если нет)</label>
+        <input type="text" id="date2" list="hdr2">
+        <datalist id="hdr2"></datalist>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Карточка клиента: что выводить</h2>
+      <div class="file-meta">Для каждого столбца базы 1 выберите место в карточке. Настройка сохраняется в браузере. Отмеченное «Закрепить» поле (слева или в центре) стоит на одном месте у каждого клиента: если значения нет, выводится «—», а остальные поля идут за ним.</div>
+      <div class="layout-list" id="layoutBox"><div class="status-msg">Загрузите базу 1, чтобы выбрать столбцы</div></div>
+      <div class="actions tight"><button class="btn-secondary" id="layoutReset">Сбросить к умолчанию</button></div>
+    </div>
+    <div class="card">
+      <h2>Цвета заливки в «Результаты пролонгации»</h2>
+      <div class="file-meta">Строка с цветом, который помечен «Пропускать», считается обработанной. Цвета, помеченные «Не пропускать», в прозвон идут. Неизвестный цвет по умолчанию пропускается.</div>
+      <div class="row"><label class="inline">Где искать заливку:
+        <select id="colorSource">
+          <option value="cell">в ячейке столбца результатов</option>
+          <option value="row">в любой ячейке строки</option>
+        </select></label></div>
+      <div id="colorBox"><div class="status-msg">Выберите столбец результатов пролонгации</div></div>
+      <div class="actions tight"><button class="btn-secondary" id="colorReset">Сбросить цвета</button></div>
+    </div>
+    <div class="actions">
+      <button class="btn-primary" id="exportResBtn">Скачать результаты прозвона</button>
+      <button class="btn-secondary" id="exportBtn">Скачать базу 2 целиком</button>
+      <span class="status-msg" id="exportInfo"></span>
+    </div>
+    <div class="file-meta">Результаты прозвона: отдельный файл только со строками, где записан результат (ключ, набранный номер, результат, дата, комментарий оператора). База 2 целиком: все строки и столбцы базы 2.</div>
+  </section>
+
+  <!-- 2. Обзор базы: таблица источника с фильтрами, статусом обзвона и выбором клиента -->
+  <section id="stage-overview" class="hidden">
+    <div class="summary" id="ovStats"></div>
+    <div class="toolbar">
+      <div id="ovFilters" class="toolbar" style="margin:0"></div>
+      <span class="grow"></span>
+      <input type="text" class="search" id="ovSearch" placeholder="Поиск по всем столбцам" aria-label="Поиск по всем столбцам">
+      <button class="btn-primary" id="ovStart">Прозвон по списку</button>
+    </div>
+    <div class="status-msg" id="ovNote" style="margin-bottom:8px"></div>
+    <div class="table-wrap">
+      <table>
+        <thead id="ovHead"></thead>
+        <tbody id="ovBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Телефон: простой режим, полное управление без клиентской базы -->
+  <section id="stage-phone" class="hidden">
+    <div class="phone-grid">
+      <div class="card">
+        <h2>Набор номера</h2>
+        <div class="dial-row">
+          <input type="text" id="pNum" placeholder="Номер, например 89161234567" inputmode="tel" aria-label="Номер для набора">
+          <button class="btn-call" id="pDial">Набрать</button>
+          <button class="btn-hang" id="pHang">Сбросить</button>
+        </div>
+        <div class="phone-status" id="pState" style="margin-top:12px">Готов</div>
+        <div class="status-line" id="pErr" style="margin-top:8px"></div>
+      </div>
+      <div class="card">
+        <h2>Все клавиши телефона</h2>
+        <div id="pKeys"></div>
+      </div>
+      <div class="card">
+        <h2>Любая разрешённая клавиша</h2>
+        <div class="dial-row">
+          <select id="pKeySel" aria-label="Клавиша для отправки"></select>
+          <button class="btn-secondary" id="pKeySend">Отправить</button>
+        </div>
+        <div class="status-line" style="margin-top:8px;white-space:normal">Список берётся с сервера. Reboot и AutoP сюда не входят: это перезагрузка и автопровижн.</div>
+      </div>
+      <div class="card">
+        <h2>Журнал: события телефона и команды</h2>
+        <div class="log" id="pLog"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Сверка -->
+  <section id="stage-compare" class="hidden">
+    <div class="actions">
+      <button class="btn-primary" id="runCompare">Сверить базы</button>
+      <span class="status-msg">Совпадение по ключу клиента. Сравниваются одинаковые столбцы обеих баз.</span>
+    </div>
+    <div id="cmpResult"></div>
+  </section>
+</div>
+
+<!-- 4. Прозвон на весь экран: раскладка по образцу АРМ -->
+<div id="call" class="hidden">
+  <header class="call-head">
+    <div class="ch-title">Обзвон клиентов</div>
+    <input type="text" class="ch-search" id="cSearch" placeholder="Укажите ключ или телефон" aria-label="Поиск клиента по ключу или телефону">
+    <span class="grow"></span>
+    <span class="pos" id="cPos"></span>
+    <div class="progress"><div id="cProgress"></div></div>
+    <button class="btn-secondary" id="cPrev">← Назад</button>
+    <button class="btn-secondary" id="cNext">Дальше →</button>
+    <button class="btn-secondary" id="cAdv">Расширенный режим</button>
+    <button class="btn-secondary" id="cExportRes">Скачать результаты</button>
+    <button class="btn-secondary" id="cExit">К обзору</button>
+  </header>
+
+  <div class="arm">
+    <!-- Слева: О клиенте -->
+    <aside class="col aside">
+      <div class="sec-h">О клиенте</div>
+      <div class="cl-name" id="cName"></div>
+      <div class="cl-meta" id="cMeta"></div>
+      <div class="badges" id="cBadges"></div>
+      <div class="lock-warn hidden" id="cLockWarn"></div>
+      <div class="sec-h mt">Телефон</div>
+      <div class="cl-phone">
+        <span class="num" id="cPhone"></span>
+        <button class="btn-secondary btn-small" id="bCopy">Копировать</button>
+      </div>
+      <div class="phones" id="cPhones"></div>
+      <button class="btn-secondary btn-small" id="bNextPhone">Следующий номер</button>
+      <div class="sec-h mt">Ключевые данные</div>
+      <div class="kv" id="cFacts"></div>
+    </aside>
+
+    <!-- По центру: вкладки сверху и карточки данных -->
+    <main class="col main">
+      <nav class="ctabs" id="cTabs">
+        <button class="ctab active" data-tab="general">Общие данные</button>
+        <button class="ctab" data-tab="details">История обзвона</button>
+        <button class="ctab adv-only hidden" data-tab="history">Журнал телефона</button>
+        <button class="ctab adv-only hidden" data-tab="keys">Все клавиши</button>
+        <button class="ctab adv-only hidden" data-tab="raw">Сырые данные</button>
+      </nav>
+      <div class="tabpane" id="pane-general">
+        <div id="cFields"></div>
+        <div class="more" id="cMore"></div>
+      </div>
+      <div class="tabpane hidden" id="pane-details">
+        <div class="sec-h">Результаты в базе 2</div>
+        <div class="table-wrap small">
+          <table>
+            <thead><tr><th>Дата обзвона</th><th>Результат</th><th>Набранный номер</th><th>Комментарий оператора</th></tr></thead>
+            <tbody id="dRes"></tbody>
+          </table>
+        </div>
+        <div class="sec-h mt">События этой сессии</div>
+        <div class="table-wrap small">
+          <table>
+            <thead><tr><th>Время</th><th>Источник</th><th>Событие</th></tr></thead>
+            <tbody id="dLog"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="tabpane hidden" id="pane-history"><div class="log" id="cLog"></div></div>
+      <div class="tabpane hidden" id="pane-keys"><div id="cKeys"></div></div>
+      <div class="tabpane hidden" id="pane-raw"><pre class="raw" id="cRaw"></pre></div>
+    </main>
+
+    <!-- Справа: звонок, комментарий колл-центра, результат оператора -->
+    <aside class="col side">
+      <div class="card-s">
+        <div class="sec-h">Звонок</div>
+        <div class="phone-display">
+          <div class="phone-status" id="cState">Готов к звонку</div>
+          <div class="timer" id="cTimer"></div>
+          <div class="status-line" id="cErr"></div>
+        </div>
+        <div class="calc" id="keypad"></div>
+      </div>
+      <div class="comment empty" id="cCommentBox">
+        <div class="sec-h">Комментарий колл-центра</div>
+        <div id="cComment"></div>
+      </div>
+      <div class="card-s">
+        <div class="sec-h">Результат оператора</div>
+        <div class="status-line" id="cPrevResult"></div>
+        <textarea class="note" id="cNote" placeholder="Комментарий оператора" aria-label="Комментарий оператора"></textarea>
+      </div>
+    </aside>
+  </div>
+
+  <div class="resultbar" id="resultBar"></div>
+</div>
+
+<script>
+const RESULTS = [
+  {label:'Ответил', value:'Дозвон: ответил', hot:'1'},
+  {label:'Не ответил', value:'Не ответил', hot:'2'},
+  {label:'Занято', value:'Занято', hot:'3'},
+  {label:'Отказ', value:'Отказ от услуги', hot:'4'},
+  {label:'Перезвонить', value:'Просил перезвонить', hot:'5'},
+  {label:'Неверный номер', value:'Неверный номер', hot:'6'},
+];
+// Все события Action URL со страницы Features -> Action URL (имена совпадают с сервером)
+const EVENT_TEXT = {
+  setup_completed:'Загрузка завершена', registered:'SIP зарегистрирован', unregistered:'SIP снят с регистрации',
+  register_failed:'Ошибка регистрации', offhook:'Трубка снята', onhook:'Трубка положена',
+  incoming:'Входящий звонок', outgoing:'Исходящий звонок', established:'Разговор', terminated:'Звонок завершён',
+  open_dnd:'DND включён', close_dnd:'DND выключен',
+  always_fwd_on:'Переадресация всегда: вкл', always_fwd_off:'Переадресация всегда: выкл',
+  busy_fwd_on:'Переадресация при занятом: вкл', busy_fwd_off:'Переадресация при занятом: выкл',
+  noanswer_fwd_on:'Переадресация без ответа: вкл', noanswer_fwd_off:'Переадресация без ответа: выкл',
+  transfer_call:'Перевод звонка', blind_transfer:'Слепой перевод', attended_transfer:'Перевод с консультацией',
+  transfer_failed:'Перевод не удался', transfer_finished:'Перевод завершён', forward_incoming:'Входящий переадресован',
+  hold:'Удержание', unhold:'Снято с удержания', mute:'Микрофон выключен', unmute:'Микрофон включён',
+  missed_call:'Пропущенный звонок', ip_changed:'Сменился IP', idle_to_busy:'Линия занята', busy_to_idle:'Линия свободна',
+  reject_incoming:'Входящий отклонён', answer_new_incoming:'Ответ на новый входящий',
+  autop_finish:'Автопровижн завершён', callwaiting_on:'Ожидание вызова: вкл', callwaiting_off:'Ожидание вызова: выкл',
+  headset:'Гарнитура', handsfree:'Громкая связь', cancel_callout:'Исходящий отменён',
+  remote_busy:'Абонент занят', remote_canceled:'Абонент сбросил звонок',
+  peripheral_info:'Данные периферии', vpn_ip:'VPN IP',
+};
+const END_EVENTS = ['terminated','remote_busy','remote_canceled','cancel_callout'];
+// Клавиши телефона по группам: [подпись, значение для servlet]
+const KEY_GROUPS = [
+  ['Набор', [['1','1'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6'],['7','7'],['8','8'],['9','9'],['0','0'],['*','*'],['#','POUND']]],
+  ['Навигация', [['▲ Вверх','UP'],['▼ Вниз','DOWN'],['◀ Влево','LEFT'],['▶ Вправо','RIGHT'],['OK','OK'],['ENTER','ENTER'],['Назад / отмена','CANCEL']]],
+  ['Звонок', [['Громкая связь','HANDFREE'],['Микрофон (mute)','MUTE'],['Удержание','F_HOLD'],['Перевод','F_TRANSFER'],
+              ['Конференция','F_CONFERENCE'],['Гарнитура','HEADSET'],['Повтор набора','RD'],['Сообщения','MSG']]],
+  ['Softkeys', [['F1','F1'],['F2','F2'],['F3','F3'],['F4','F4']]],
+  ['Громкость и DND', [['Громче','VOLUME_UP'],['Тише','VOLUME_DOWN'],['DND вкл','DNDOn'],['DND выкл','DNDOff']]],
+  ['Линии и DSS', [['L1','L1'],['L2','L2'],['L3','L3'],['L4','L4'],['L5','L5'],['L6','L6'],
+                   ['D1','D1'],['D2','D2'],['D3','D3'],['D4','D4'],['D5','D5'],['D6','D6']]],
+];
+const FILTERS = [['all','Все'],['todo','Не обзвонены'],['done','Обзвонены'],['lock','Уже обработаны в базе 1'],['comment','С комментарием АКЦ'],['nophone','Без номера']];
+const SAVE_KEY = 'autodozvon.mapping';
+const DEFAULT_KEY2 = 'Ключ клиента';
+// Панель набора: 4 колонки, 5 строк. Действия: dial, hang, skip, либо клавиша servlet
+const CALC_KEYS = [
+  ['Набрать','dial','call'], ['Сбросить','hang','hang'], ['Громк.','HANDFREE','sec'], ['Mute','MUTE','sec'],
+  ['1','1',''], ['2','2',''], ['3','3',''], ['Удерж.','F_HOLD','sec'],
+  ['4','4',''], ['5','5',''], ['6','6',''], ['Перевод','F_TRANSFER','sec'],
+  ['7','7',''], ['8','8',''], ['9','9',''], ['Пропуск','skip','sec'],
+  ['*','*',''], ['0','0',''], ['#','POUND',''], ['OK','OK','sec'],
+];
+const TABLE_LIMIT = 300;
+// Колонка результатов пролонгации в базе 1: по правилу расширения ВСК для ОСАГО
+const RES_RX = /результат.*пролонг|пролонг.*результат/i;
+const NAME_RX = /фио|клиент|имя|наименован|фамил/i;
+const PHONE_RX = /тел|phone|моб/i;
+const KEY_RX = /ключ|договор|полис|id|код|номер клиента/i;
+// Ключевые данные карточки в порядке важности: первое совпадение по каждому правилу
+const FACT_RX = [/полис|договор/i, /сумма|премия|стоимост|цена/i, /срок|дата|окончан|начал/i,
+                 /марка|модель|автомоб|авто|гос|vin/i, /регион|город|адрес/i, /агент|менеджер|филиал|отдел/i];
+
+const S = {
+  wb1:null, wb2:null, t1:null, t2:null,
+  key1:'', phone1:'', key2:'', comment2:'',
+  result2:'Результат обзвона', note2:'Комментарий оператора', date2:'Дата обзвона', num2:'Набранный номер',
+  phones:[], phoneIdx:0, palAction:'skip',
+  index2:new Map(), filter:'all', search:'', visible:[], queue:[], qpos:0, cur:null,
+  resCol1:'', sheet1:'', sheet2:'',
+  colorRules:{}, colorSource:'cell', layout:{}, pinned:{}, log:[],
+  lastEvent:0, callStart:0, callEnd:0, dirty:false,
+};
+
+const $ = id => document.getElementById(id);
+const norm = v => String(v ?? '').replace(/\s+/g,' ').trim();
+const keyOf = v => norm(v).toLowerCase();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const pad2 = n => String(n).padStart(2,'0');
+
+// Набор номера: код страны (7 или 8 перед 10 цифрами) убирается, перед номером ставится 98.
+// 9 — выход на внешнюю линию, 8 — код набора по России. Короткие номера (внутренние) не меняются.
+const DIAL_PREFIX = '98';
+function toDialDigits(raw){
+  let d = String(raw ?? '').replace(/\D/g,'');
+  if (d.length === 11 && (d[0] === '7' || d[0] === '8')) d = d.slice(1);
+  if (d.length === 10) return DIAL_PREFIX + d;
+  return d;
+}
+// Номера в одной ячейке: «8903…, +7 916…» или через «;», «/», с новой строки. Порядок сохраняется: сначала первый
+function phoneList(r){
+  return String(r[S.phone1] ?? '').split(/[,;\n\/]+/)
+    .map(s => s.trim())
+    .filter(s => toDialDigits(s).length >= 10);
+}
+function fmtTime(ms){ const s = Math.floor(ms / 1000); return pad2(Math.floor(s / 60)) + ':' + pad2(s % 60); }
+function today(){ const d = new Date(); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function pickHeader(headers, preferred, rx){
+  if (preferred && headers.includes(preferred)) return preferred;
+  return headers.find(h => rx.test(h)) || headers[0] || '';
+}
+function fillSelect(sel, items, value, emptyLabel){
+  sel.innerHTML = '';
+  if (emptyLabel !== undefined) sel.add(new Option(emptyLabel, ''));
+  items.forEach(h => sel.add(new Option(h, h)));
+  sel.value = items.includes(value) ? value : (emptyLabel !== undefined ? '' : (items[0] || ''));
+  sel.disabled = items.length === 0;
+}
+function fillSheets(sel, wb){
+  sel.innerHTML = '';
+  wb.SheetNames.forEach(n => sel.add(new Option(n, n)));
+  sel.disabled = false;
+}
+
+// Файл в книгу. CSV без BOM: сначала UTF-8, а если байты не UTF-8, то Windows-1251 (так сохраняет Excel в русской локали)
+async function readWorkbook(file, opts){
+  const buf = await file.arrayBuffer();
+  if (/\.csv$/i.test(file.name)) {
+    let text;
+    try { text = new TextDecoder('utf-8', {fatal: true}).decode(buf); }
+    catch (e) { text = new TextDecoder('windows-1251').decode(buf); }
+    return XLSX.read(text, {...opts, type: 'string'});
+  }
+  return XLSX.read(buf, {...opts, type: 'array'});
+}
+
+/* ---------- Чтение Excel: порт из macro-builder/excel-import.js ---------- */
+// Текст ячейки так, как его видно в Excel. Длинные целые (телефон, ИНН) в «Общем» формате
+// берём целиком: Excel в узком столбце показывает их как 8,9E+10.
+function cellText(cell){
+  if (!cell || cell.v === undefined || cell.v === null) return '';
+  let shown;
+  if (cell.w !== undefined && cell.w !== null) shown = String(cell.w);
+  else if (XLSX.utils.format_cell) shown = String(XLSX.utils.format_cell(cell));
+  else shown = String(cell.v);
+  if (cell.t === 'n' && cell.z && shown === String(cell.v) && XLSX.SSF && XLSX.SSF.is_date && XLSX.SSF.is_date(cell.z)) {
+    const d = XLSX.SSF.parse_date_code(cell.v);
+    if (d) shown = `${pad2(d.d)}.${pad2(d.m)}.${d.y}` + (d.H || d.M ? ` ${pad2(d.H)}:${pad2(d.M)}` : '');
+  }
+  if (cell.t === 'n' && Number.isInteger(cell.v) && Math.abs(cell.v) < 1e21 && (!cell.z || cell.z === 'General') && /E[+-]?\d+$/i.test(shown)) {
+    return String(cell.v);
+  }
+  return shown;
+}
+// Непустые строки листа с номерами строк Excel
+function sheetLines(ws){
+  if (!ws || !ws['!ref']) return [];
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const lines = [];
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    const cells = []; let blank = true;
+    for (let c = 0; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({r, c})];
+      if (cell && cell.v !== undefined && cell.v !== null) blank = false;
+      cells.push(cellText(cell));
+    }
+    if (!blank) lines.push({cells, rowNum: r + 1});
+  }
+  return lines;
+}
+// Первая непустая строка — заголовки. Строки данных хранят номер строки Excel в __row
+function parseSheet(wb, name){
+  const lines = sheetLines(wb.Sheets[name]);
+  if (!lines.length) return {headers:[], rows:[]};
+  const headers = [];
+  lines[0].cells.forEach((h, i) => {
+    let n = norm(h) || `Столбец ${i+1}`, base = n, k = 2;
+    while (headers.includes(n)) n = `${base} (${k++})`;
+    headers.push(n);
+  });
+  const rows = lines.slice(1).map(l => {
+    const o = {__row: l.rowNum};
+    headers.forEach((h, i) => o[h] = l.cells[i] ?? '');
+    return o;
+  });
+  return {headers, rows};
+}
+function downloadXlsx(headers, rows, name){
+  const aoa = [headers, ...rows.map(r => headers.map(h => r[h] ?? ''))];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Лист1');
+  XLSX.writeFile(wb, name);
+}
+
+/* ---------- Выбор колонок запоминается (только имена столбцов) ---------- */
+function saveMapping(){
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      key1:S.key1, phone1:S.phone1, resCol1:S.resCol1, key2:S.key2, comment2:S.comment2,
+      result2:S.result2, note2:S.note2, date2:S.date2,
+    }));
+  } catch (e) { /* хранилище недоступно: не запоминаем */ }
+}
+function loadMapping(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch (e) { return {}; }
+}
+const saved0 = loadMapping();
+S.key1 = saved0.key1 || ''; S.phone1 = saved0.phone1 || ''; S.resCol1 = saved0.resCol1 || '';
+S.key2 = saved0.key2 || DEFAULT_KEY2; S.comment2 = saved0.comment2 || '';
+S.result2 = saved0.result2 || S.result2; S.note2 = saved0.note2 || S.note2; S.date2 = saved0.date2 || S.date2;
+$('result2').value = S.result2; $('note2').value = S.note2; $('date2').value = S.date2;
+
+/* ---------- База 1 ---------- */
+$('f1').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  S.wb1 = await readWorkbook(f, {cellDates:true, cellNF:true, cellStyles:true});
+  fillSheets($('sh1'), S.wb1);
+  onSheet1();
+});
+$('sh1').addEventListener('change', onSheet1);
+function onSheet1(){
+  if (!S.wb1) return;
+  S.sheet1 = $('sh1').value;
+  S.t1 = parseSheet(S.wb1, S.sheet1);
+  const h = S.t1.headers;
+  S.key1 = pickHeader(h, S.key1, KEY_RX);
+  S.phone1 = pickHeader(h, S.phone1, PHONE_RX);
+  S.resCol1 = h.includes(S.resCol1) ? S.resCol1 : (h.find(x => RES_RX.test(x)) || '');
+  fillSelect($('key1'), h, S.key1);
+  fillSelect($('phone1'), h, S.phone1);
+  fillSelect($('resCol1'), h, S.resCol1, '— не проверять —');
+  $('m1').textContent = `Строк: ${S.t1.rows.length}, столбцов: ${h.length}`;
+  saveMapping();
+  buildIndex();
+  renderOverview();
+  renderLayoutBox();
+  renderColorBox();
+}
+$('key1').addEventListener('change', e => { S.key1 = e.target.value; saveMapping(); buildIndex(); renderOverview(); });
+$('phone1').addEventListener('change', e => { S.phone1 = e.target.value; saveMapping(); renderOverview(); });
+$('resCol1').addEventListener('change', e => { S.resCol1 = e.target.value; saveMapping(); renderOverview(); renderColorBox(); });
+
+/* ---------- База 2 ---------- */
+$('f2').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (!confirmReplaceBase2()) { e.target.value = ''; return; }
+  S.wb2 = await readWorkbook(f, {cellDates:true, cellNF:true});
+  fillSheets($('sh2'), S.wb2);
+  onSheet2();
+});
+$('sh2').addEventListener('change', () => {
+  if (!confirmReplaceBase2()) { $('sh2').value = S.sheet2; return; }
+  onSheet2();
+});
+// Таблица результатов заменяется новой базой 2 или другим листом, поэтому несохранённые результаты спрашиваем
+function confirmReplaceBase2(){
+  return !S.dirty || confirm('Результаты прозвона ещё не скачаны. Загрузка другой базы 2 или листа заменит их в таблице. Продолжить?');
+}
+function onSheet2(){
+  if (!S.wb2) return;
+  S.sheet2 = $('sh2').value;
+  S.t2 = parseSheet(S.wb2, S.sheet2);
+  S.dirty = false;
+  const h = S.t2.headers;
+  S.key2 = pickHeader(h, S.key2, KEY_RX);
+  S.comment2 = h.includes(S.comment2) ? S.comment2 : (h.find(x => /коммент/i.test(x)) || '');
+  fillSelect($('key2'), h, S.key2);
+  fillSelect($('comment2'), h, S.comment2, '— не показывать —');
+  $('m2').textContent = `Строк: ${S.t2.rows.length}, столбцов: ${h.length}`;
+  ensureT2();
+  saveMapping();
+}
+$('key2').addEventListener('change', e => { S.key2 = e.target.value; saveMapping(); ensureT2(); });
+$('comment2').addEventListener('change', e => { S.comment2 = e.target.value; saveMapping(); renderOverview(); });
+[['result2',$('result2')],['note2',$('note2')],['date2',$('date2')]].forEach(([name, el]) => {
+  el.addEventListener('change', () => { S[name] = norm(el.value) || S[name]; el.value = S[name]; saveMapping(); ensureT2(); });
+});
+
+// База 2 может отсутствовать: таблица результатов создаётся пустой
+function ensureT2(){
+  if (!S.t2) S.t2 = {headers:[], rows:[]};
+  [S.key2, S.result2, S.note2, S.date2, S.num2].forEach(h => {
+    if (h && !S.t2.headers.includes(h)) {
+      S.t2.headers.push(h);
+      S.t2.rows.forEach(r => r[h] = '');
+    }
+  });
+  const list = $('hdr2');
+  list.innerHTML = '';
+  S.t2.headers.forEach(h => list.appendChild(new Option(h, h)));
+  buildIndex();
+  $('m2').textContent = `Строк: ${S.t2.rows.length}, столбцов: ${S.t2.headers.length}`;
+}
+function buildIndex(){
+  S.index2 = new Map();
+  if (!S.t2) return;
+  S.t2.rows.forEach(r => {
+    const k = keyOf(r[S.key2]);
+    if (k && !S.index2.has(k)) S.index2.set(k, r);
+  });
+}
+$('exportResBtn').addEventListener('click', exportResultsFile);
+$('cExportRes').addEventListener('click', exportResultsFile);
+$('exportBtn').addEventListener('click', exportBase2);
+// Отдельный файл только с результатами: строки базы 2, где записан результат, в столбцах результата
+function exportResultsFile(){
+  ensureT2();
+  const rows = S.t2.rows.filter(r => norm(r[S.result2]));
+  if (!rows.length) return reportExport('Результатов пока нет: сохранять нечего.');
+  downloadXlsx([S.key2, S.num2, S.result2, S.date2, S.note2], rows, `результаты_прозвона_${today()}.xlsx`);
+  S.dirty = false;
+  reportExport(`Файл с результатами сохранён. Строк: ${rows.length}`);
+}
+// Вся база 2 со всеми столбцами
+function exportBase2(){
+  ensureT2();
+  downloadXlsx(S.t2.headers, S.t2.rows, `база2_${today()}.xlsx`);
+  S.dirty = false;
+  reportExport(`База 2 сохранена. Строк: ${S.t2.rows.length}, с результатом: ${doneCount()}`);
+}
+// Сообщение видно и на вкладке «Данные», и в карточке прозвона
+function reportExport(text){
+  $('exportInfo').textContent = text;
+  $('cErr').textContent = text;
+}
+function doneCount(){
+  if (!S.t2) return 0;
+  return S.t2.rows.filter(r => norm(r[S.result2])).length;
+}
+window.addEventListener('beforeunload', e => {
+  if (S.dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+/* ---------- Навигация ---------- */
+document.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => showStage(b.dataset.stage)));
+function showStage(name){
+  ['data','overview','phone','compare'].forEach(s => $('stage-' + s).classList.toggle('hidden', s !== name));
+  document.querySelectorAll('button[data-stage]').forEach(b => {
+    b.className = b.dataset.stage === name ? 'btn-primary' : 'btn-secondary';
+  });
+  if (name === 'overview') renderOverview();
+  if (name === 'phone') renderLogs();
+}
+
+/* ---------- Обзор базы ---------- */
+// Статус строки: результат и комментарий берутся из базы 2 по ключу клиента
+// Правило из расширения ВСК для ОСАГО: цвет по умолчанию (белый, тема 0, indexed 1/64/65) не считается.
+function isWhiteOrDefaultFill(color){
+  if (!color) return true;
+  if (color.rgb) return color.rgb.toUpperCase().slice(-6) === 'FFFFFF';
+  // Фон 1 без оттенка — белый. С оттенком (например, темнее 5%) это серый фон, его учитываем
+  if (color.theme === 0) return !color.tint;
+  if (color.indexed === 1 || color.indexed === 64 || color.indexed === 65) return true;
+  return false;
+}
+// Цвет заливки как ключ: rgb:RRGGBB, theme:N:оттенок или idx:N. Белый и цвет по умолчанию — null
+function fillKey(cell){
+  if (!cell || !cell.s || !cell.s.patternType || cell.s.patternType === 'none') return null;
+  const c = cell.s.fgColor;
+  if (isWhiteOrDefaultFill(c)) return null;
+  if (c.rgb) return 'rgb:' + c.rgb.toUpperCase().slice(-6);
+  if (c.theme !== undefined) return 'theme:' + c.theme + ':' + Math.round((c.tint || 0) * 100) / 100;
+  if (c.indexed !== undefined) return 'idx:' + c.indexed;
+  return null;
+}
+// Цвета, которые пользователь пометил «Пропускать» или «Не пропускать». Неизвестный цвет по умолчанию пропускается
+const COLORS_KEY = 'autodozvon.colors';
+S.colorRules = (() => { try { return JSON.parse(localStorage.getItem(COLORS_KEY)) || {}; } catch (e) { return {}; } })();
+function saveColors(){
+  try { localStorage.setItem(COLORS_KEY, JSON.stringify(S.colorRules)); } catch (e) { /* хранилище недоступно */ }
+}
+function isCellColored(cell){
+  const key = fillKey(cell);
+  return !!key && (S.colorRules[key] || 'skip') === 'skip';
+}
+// Палитра Excel «Заливка»: стандартные цвета и цвета темы с оттенками, как на скриншоте.
+// Тема Office 2007–2010 (индексы Excel: 0 фон 1, 1 текст 1, 2 фон 2, 3 текст 2, 4–9 акценты 1–6).
+// Тема в файле хранится внутри xlsx: если она другая, оттенки могут не совпасть.
+const EXCEL_STANDARD = [
+  ['rgb:C00000', 'Темно-красный'], ['rgb:FF0000', 'Красный'], ['rgb:FFC000', 'Оранжевый'], ['rgb:FFFF00', 'Желтый'],
+  ['rgb:92D050', 'Светло-зеленый'], ['rgb:00B050', 'Зеленый'], ['rgb:00B0F0', 'Светло-синий'],
+  ['rgb:0070C0', 'Синий'], ['rgb:002060', 'Темно-синий'], ['rgb:7030A0', 'Фиолетовый'],
+];
+const THEME_BASE = [
+  ['Фон 1 (белый)', 'FFFFFF'], ['Текст 1 (черный)', '000000'], ['Фон 2', 'EEECE1'], ['Текст 2 (темно-синий)', '1F497D'],
+  ['Акцент 1 (синий)', '4F81BD'], ['Акцент 2 (красный)', 'C0504D'], ['Акцент 3 (оливковый)', '9BBB59'],
+  ['Акцент 4 (фиолетовый)', '8064A2'], ['Акцент 5 (бирюзовый)', '4BACC6'], ['Акцент 6 (оранжевый)', 'F79646'],
+];
+// Оттенки в порядке палитры Excel: базовый, затем светлее, затем темнее
+const TINTS = [0, 0.8, 0.6, 0.4, -0.25, -0.5];
+// Смешивание цвета с белым (светлее) или черным (темнее), как считает Excel
+function tintHex(hex, t){
+  const c = [0, 2, 4].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return c.map(v => Math.round(t > 0 ? v + (255 - v) * t : v * (1 + t)))
+    .map(v => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+function tintName(t){
+  if (t > 0) return `светлее ${Math.round(t * 100)}%`;
+  if (t < 0) return `темнее ${Math.round(-t * 100)}%`;
+  return 'базовый';
+}
+// Подпись и цвет для показа по ключу заливки (hex без «#»)
+function colorInfo(key){
+  const std = EXCEL_STANDARD.find(([k]) => k === key);
+  if (std) return {label: `${std[1]} (${key.slice(4)})`, hex: key.slice(4)};
+  if (key.startsWith('theme:')) {
+    const [, idx, tintS] = key.split(':');
+    const t = Number(tintS) || 0;
+    const base = THEME_BASE[Number(idx)] || ['Тема ' + idx, 'BBBBBB'];
+    return {label: `${base[0]}, ${tintName(t)}`, hex: tintHex(base[1], t)};
+  }
+  if (key.startsWith('rgb:')) return {label: `Цвет #${key.slice(4)}`, hex: key.slice(4)};
+  return {label: key, hex: 'BBBBBB'};
+}
+// Сколько строк результатов имеет каждый цвет заливки
+function scanColors(){
+  const counts = new Map();
+  if (!S.t1 || !S.resCol1) return counts;
+  S.t1.rows.forEach(r => {
+    const key = colorKeyOf(r);
+    if (key) counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return counts;
+}
+function setColorRule(key, action){
+  S.colorRules[key] = action;
+  saveColors();
+  renderColorBox();
+  renderOverview();
+}
+function renderColorBox(){
+  const box = $('colorBox');
+  const counts = scanColors();
+  const found = [...counts.keys()];
+  let html = '';
+  if (S.t1 && S.resCol1) {
+    const inCell = S.t1.rows.filter(r => fillKey(resultCell(r))).length;
+    const inRow = S.t1.rows.filter(r => rowFillKey(r)).length;
+    html += `<div class="status-msg">Столбец «${esc(S.resCol1)}»: закрашено ячеек ${inCell}. ` +
+      `Строк с заливкой в любой ячейке: ${inRow}. Сейчас учитывается: ${S.colorSource === 'row' ? 'любая ячейка строки' : 'ячейка результата'}.</div>`;
+  }
+  if (!S.t1 || !S.resCol1) {
+    html += '<div class="status-msg">Выберите столбец результатов пролонгации на вкладке «Данные»</div>';
+  } else if (!found.length) {
+    html += '<div class="status-msg">В этом столбце нет закрашенных ячеек. Палитра ниже нужна только для назначения цветов.</div>';
+  } else {
+    html += '<table><thead><tr><th>Цвет в файле</th><th>Строк</th><th>Действие</th></tr></thead><tbody>';
+    found.forEach(key => {
+      const info = colorInfo(key);
+      const action = S.colorRules[key] || 'skip';
+      html += `<tr><td><span class="swatch" style="background:#${info.hex}"></span>${esc(info.label)}</td>` +
+        `<td>${counts.get(key)}</td><td><select data-key="${esc(key)}">` +
+        `<option value="skip"${action === 'skip' ? ' selected' : ''}>Пропускать строку</option>` +
+        `<option value="ignore"${action === 'ignore' ? ' selected' : ''}>Не пропускать</option></select></td></tr>`;
+    });
+    html += '</tbody></table>';
+  }
+  html += '<details class="palbox"><summary>Палитра Excel: назначить цвет, которого нет в файле</summary>';
+  // Действие палитры запоминаем отдельно: при перерисовке блока выбор не должен сбрасываться
+  html += '<div class="row"><select id="palAction">' +
+    `<option value="skip"${S.palAction === 'skip' ? ' selected' : ''}>Пропускать строку</option>` +
+    `<option value="ignore"${S.palAction === 'ignore' ? ' selected' : ''}>Не пропускать</option></select></div>`;
+  // Как в палитре Excel: колонка на цвет темы, строка на оттенок; ниже стандартные цвета
+  html += '<div class="xpal">';
+  html += '<div class="xpal-h">Цвета темы</div>';
+  TINTS.forEach(t => {
+    THEME_BASE.forEach((base, idx) => {
+      if (idx === 0) { html += '<span class="xpal-empty"></span>'; return; }
+      const key = `theme:${idx}:${t}`;
+      const rule = S.colorRules[key] ? ' ' + S.colorRules[key] : '';
+      html += `<button type="button" class="xpal-c${rule}" data-pal="${key}" title="${esc(base[0])}, ${esc(tintName(t))}" ` +
+        `style="background:#${tintHex(base[1], t)}"></button>`;
+    });
+  });
+  html += '<div class="xpal-h">Стандартные цвета</div>';
+  EXCEL_STANDARD.forEach(([key, name]) => {
+    const rule = S.colorRules[key] ? ' ' + S.colorRules[key] : '';
+    html += `<button type="button" class="xpal-c${rule}" data-pal="${key}" title="${esc(name)}" ` +
+      `style="background:#${key.slice(4)}"></button>`;
+  });
+  html += '</div>';
+  html += '<div class="status-msg">Обводка красная — цвет пропускается, зеленая — не пропускается. ' +
+    'Цвета темы показаны для темы Office 2007–2010. Если в вашем файле другая тема, назначьте оттенок из таблицы «Цвет в файле».</div>';
+  html += '</details>';
+  box.innerHTML = html;
+  box.querySelectorAll('select[data-key]').forEach(sel => {
+    sel.addEventListener('change', () => setColorRule(sel.dataset.key, sel.value));
+  });
+  $('palAction').addEventListener('change', e => { S.palAction = e.target.value; });
+  box.querySelectorAll('button[data-pal]').forEach(b => {
+    b.addEventListener('click', () => setColorRule(b.dataset.pal, S.palAction));
+  });
+}
+$('colorReset').addEventListener('click', () => { S.colorRules = {}; saveColors(); renderColorBox(); renderOverview(); });
+$('colorSource').addEventListener('change', e => { setColorSource(e.target.value); renderColorBox(); renderOverview(); });
+
+// Ячейка колонки результатов пролонгации в исходном файле (нужны стили и комментарии)
+function resultCell(r){
+  if (!S.t1 || !S.resCol1 || !S.sheet1) return null;
+  const c = S.t1.headers.indexOf(S.resCol1);
+  if (c < 0) return null;
+  const ws = S.wb1.Sheets[S.sheet1];
+  return ws ? ws[XLSX.utils.encode_cell({r: r.__row - 1, c})] || null : null;
+}
+// Цвет строки: из ячейки столбца результатов или из первой закрашенной ячейки строки (в зависимости от настройки)
+const COLOR_SOURCE_KEY = 'autodozvon.colorSource';
+S.colorSource = (() => { try { return localStorage.getItem(COLOR_SOURCE_KEY) || 'cell'; } catch (e) { return 'cell'; } })();
+function setColorSource(v){
+  S.colorSource = v;
+  try { localStorage.setItem(COLOR_SOURCE_KEY, v); } catch (e) { /* хранилище недоступно */ }
+}
+function rowFillKey(r){
+  if (!S.t1 || !S.sheet1 || !S.wb1) return null;
+  const ws = S.wb1.Sheets[S.sheet1];
+  if (!ws || !ws['!ref']) return null;
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const key = fillKey(ws[XLSX.utils.encode_cell({r: r.__row - 1, c})]);
+    if (key) return key;
+  }
+  return null;
+}
+function colorKeyOf(r){
+  return S.colorSource === 'row' ? rowFillKey(r) : fillKey(resultCell(r));
+}
+// Строка обработана только по цвету: если её цвет помечен «Пропускать». Текст и комментарий не учитываются
+function processedReason(r){
+  if (!S.resCol1) return '';
+  const key = colorKeyOf(r);
+  if (key && (S.colorRules[key] || 'skip') === 'skip') return 'цвет';
+  return '';
+}
+function rowInfo(r){
+  const k = keyOf(r[S.key1]);
+  const row2 = k ? S.index2.get(k) || null : null;
+  const cell = resultCell(r);
+  return {
+    row2,
+    res: row2 ? norm(row2[S.result2]) : '',
+    comment: row2 && S.comment2 ? norm(row2[S.comment2]) : '',
+    noPhone: phoneList(r).length === 0,
+    done: !!(row2 && norm(row2[S.result2])),
+    lock: processedReason(r),
+    lockText: cell && cell.v != null ? norm(cell.v) : '',
+  };
+}
+function passesFilter(info){
+  switch (S.filter) {
+    case 'todo': return !info.done && !info.noPhone && !info.lock;
+    case 'done': return info.done;
+    case 'lock': return !!info.lock;
+    case 'comment': return !!info.comment;
+    case 'nophone': return info.noPhone;
+    default: return true;
+  }
+}
+// Клиенты, которые видны в обзоре (с учётом фильтра и поиска): по ним идёт прозвон
+function visibleRows(){
+  if (!S.t1) return [];
+  const q = S.search.toLowerCase();
+  return S.t1.rows.filter(r => {
+    if (!keyOf(r[S.key1])) return false;
+    const info = rowInfo(r);
+    if (!passesFilter(info)) return false;
+    if (q && !S.t1.headers.some(h => norm(r[h]).toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+function renderFilters(){
+  const box = $('ovFilters');
+  if (box.childElementCount) return;
+  FILTERS.forEach(([id, label]) => {
+    const b = document.createElement('button');
+    b.className = 'btn-secondary btn-small';
+    b.dataset.filter = id;
+    b.textContent = label;
+    b.addEventListener('click', () => { S.filter = id; renderOverview(); });
+    box.appendChild(b);
+  });
+}
+$('ovSearch').addEventListener('input', e => { S.search = e.target.value; renderOverview(); });
+$('ovStart').addEventListener('click', () => openCall(0));
+$('ovBody').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]');
+  if (b) openCall(Number(b.dataset.i));
+});
+$('openCall').addEventListener('click', () => openCall(0));
+
+function renderOverview(){
+  renderFilters();
+  document.querySelectorAll('#ovFilters button').forEach(b => b.classList.toggle('active', b.dataset.filter === S.filter));
+  if (!S.t1) {
+    $('ovStats').innerHTML = '';
+    $('ovHead').innerHTML = '';
+    $('ovBody').innerHTML = '';
+    $('ovNote').textContent = 'Сначала загрузите базу 1 на вкладке «Данные».';
+    S.visible = [];
+    return;
+  }
+  buildIndex();
+  let total = 0, done = 0, todo = 0, comments = 0, nophone = 0, locked = 0;
+  S.t1.rows.forEach(r => {
+    if (!keyOf(r[S.key1])) return;
+    total++;
+    const info = rowInfo(r);
+    if (info.lock) locked++;
+    if (info.done) done++;
+    else if (info.noPhone) nophone++;
+    else if (!info.lock) todo++;
+    if (info.comment) comments++;
+  });
+  $('ovStats').innerHTML = [
+    ['Клиентов', total, ''], ['Обзвонены', done, 'ok'], ['Не обзвонены', todo, 'warn'],
+    ['Обработаны в базе 1', locked, 'info'], ['С комментарием АКЦ', comments, 'info'], ['Без номера', nophone, 'bad'],
+  ].map(([l, n, c]) => `<div class="stat ${c}"><div class="num">${n}</div><div class="lbl">${l}</div></div>`).join('');
+
+  S.visible = visibleRows();
+  const cols = S.t1.headers;
+  $('ovHead').innerHTML = '<tr><th></th><th>Строка</th><th>Статус</th>' +
+    cols.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>';
+  const shown = S.visible.slice(0, TABLE_LIMIT);
+  $('ovBody').innerHTML = shown.map((r, i) => {
+    const info = rowInfo(r);
+    const badge = info.done ? `<span class="badge ok">${esc(info.res)}</span>`
+      : info.lock ? `<span class="badge info">обработана: ${esc(info.lock)}</span>`
+      : info.noPhone ? '<span class="badge bad">нет номера</span>'
+      : '<span class="badge warn">не обзвонен</span>';
+    const cells = cols.map(h => `<td title="${esc(norm(r[h]))}">${esc(norm(r[h]))}</td>`).join('');
+    const callBtn = info.lock ? '<span class="status-msg">не в прозвоне</span>'
+      : `<button class="btn-secondary btn-small" data-i="${i}">Прозвон</button>`;
+    return `<tr><td>${callBtn}</td>` +
+      `<td class="rownum">${r.__row}</td><td>${badge}</td>${cells}</tr>`;
+  }).join('') || '<tr><td class="empty-state" colspan="99">Нет клиентов под этот фильтр</td></tr>';
+  $('ovNote').textContent = `Показано ${shown.length} из ${S.visible.length}` +
+    (S.visible.length > TABLE_LIMIT ? ' — сузьте фильтр или поиск, чтобы увидеть остальных' : '') +
+    '. «Прозвон» начинает обзвон с этой строки по текущему списку.';
+}
+
+/* ---------- Сверка двух баз ---------- */
+$('runCompare').addEventListener('click', runCompare);
+function runCompare(){
+  if (!S.t1 || !S.t2) {
+    $('cmpResult').innerHTML = '<div class="card empty-state">Сначала загрузите базы на вкладке «Данные».</div>';
+    return;
+  }
+  const group = (t, keyName) => {
+    const m = new Map();
+    t.rows.forEach(r => {
+      const k = keyOf(r[keyName]);
+      if (!k) return;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k).push(r);
+    });
+    return m;
+  };
+  const m1 = group(S.t1, S.key1), m2 = group(S.t2, S.key2);
+  const only1 = [], only2 = [], both = [];
+  m1.forEach((rows, k) => { if (m2.has(k)) both.push(k); else only1.push(...rows); });
+  m2.forEach((rows, k) => { if (!m1.has(k)) only2.push(...rows); });
+  const dup1 = [...m1.values()].filter(a => a.length > 1).length;
+  const dup2 = [...m2.values()].filter(a => a.length > 1).length;
+
+  const skipCols = [S.result2, S.note2, S.date2];
+  const common = S.t1.headers.filter(h => S.t2.headers.includes(h) && !skipCols.includes(h));
+  const diffs = [];
+  both.forEach(k => {
+    const a = m1.get(k)[0], b = m2.get(k)[0];
+    common.forEach(h => {
+      if (norm(a[h]) !== norm(b[h])) diffs.push({key:k, col:h, v1:norm(a[h]), v2:norm(b[h])});
+    });
+  });
+  const rowsHtml = (list, cols, limit = TABLE_LIMIT) => list.slice(0, limit).map(r =>
+    '<tr>' + cols.map(c => `<td>${esc(norm(r[c]))}</td>`).join('') + '</tr>').join('');
+
+  $('cmpResult').innerHTML = `
+    <div class="card">
+      <div class="summary">
+        <div class="sum-stat"><b>${m1.size}</b><span>Ключей в базе 1</span></div>
+        <div class="sum-stat"><b>${both.length}</b><span>Совпало по ключу</span></div>
+        <div class="sum-stat"><b>${only1.length}</b><span>Только в базе 1</span></div>
+        <div class="sum-stat"><b>${only2.length}</b><span>Только в базе 2</span></div>
+        <div class="sum-stat"><b>${diffs.length}</b><span>Расхождений в значениях</span></div>
+      </div>
+      <div class="status-msg">Дубликатов ключа: в базе 1 — ${dup1}, в базе 2 — ${dup2}</div>
+      <div class="actions" style="margin:12px 0 0">
+        <button class="btn-secondary" id="dl1" ${only1.length ? '' : 'disabled'}>Скачать «только в базе 1»</button>
+        <button class="btn-secondary" id="dl2" ${only2.length ? '' : 'disabled'}>Скачать «только в базе 2»</button>
+      </div>
+    </div>
+    <div class="file-meta" style="margin:6px 0">Только в базе 1 (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr>${S.t1.headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rowsHtml(only1, S.t1.headers) || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>
+    <div class="file-meta" style="margin:6px 0">Только в базе 2 (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr>${S.t2.headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${rowsHtml(only2, S.t2.headers) || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>
+    <div class="file-meta" style="margin:6px 0">Расхождения у совпавших ключей (первые ${TABLE_LIMIT})</div>
+    <div class="table-wrap"><table><thead><tr><th>Ключ</th><th>Столбец</th><th>База 1</th><th>База 2</th></tr></thead>
+      <tbody>${diffs.slice(0, TABLE_LIMIT).map(d => `<tr><td>${esc(d.key)}</td><td>${esc(d.col)}</td><td>${esc(d.v1)}</td><td>${esc(d.v2)}</td></tr>`).join('') || '<tr><td class="empty-state">Нет</td></tr>'}</tbody></table></div>`;
+
+  $('dl1').onclick = () => downloadXlsx(S.t1.headers, only1, `только_в_базе1_${today()}.xlsx`);
+  $('dl2').onclick = () => downloadXlsx(S.t2.headers, only2, `только_в_базе2_${today()}.xlsx`);
+}
+
+/* ---------- Прозвон ---------- */
+RESULTS.forEach(r => {
+  const b = document.createElement('button');
+  b.className = 'btn-secondary';
+  b.innerHTML = `<kbd>${r.hot}</kbd>${r.label}`;
+  b.addEventListener('click', () => saveResult(r));
+  $('resultBar').appendChild(b);
+});
+// Панель набора: фиксированная сетка 4×5, как у калькулятора. [подпись, действие, класс]
+CALC_KEYS.forEach(([label, action, cls]) => {
+  const b = document.createElement('button');
+  b.className = 'calc-key ' + (cls || '');
+  b.textContent = label;
+  b.title = action;
+  b.addEventListener('click', () => {
+    if (action === 'dial') dial();
+    else if (action === 'hang') sendKey('CANCEL');
+    else if (action === 'skip') show(S.qpos + 1);
+    else sendKey(action);
+  });
+  $('keypad').appendChild(b);
+});
+
+// Вкладки центральной панели
+function showTab(name){
+  document.querySelectorAll('#cTabs .ctab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  ['general', 'details', 'history', 'keys', 'raw'].forEach(t => $('pane-' + t).classList.toggle('hidden', t !== name));
+}
+document.querySelectorAll('#cTabs .ctab').forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+
+$('cExit').addEventListener('click', closeCall);
+$('cPrev').addEventListener('click', () => show(S.qpos - 1));
+$('cNext').addEventListener('click', () => show(S.qpos + 1));
+$('bCopy').addEventListener('click', () => {
+  const text = S.phones[S.phoneIdx] || '';
+  if (text && navigator.clipboard) navigator.clipboard.writeText(text).catch(() => {});
+});
+
+document.addEventListener('keydown', e => {
+  if ($('call').classList.contains('hidden')) return;
+  if (['TEXTAREA','INPUT','SELECT'].includes(e.target.tagName)) return;
+  if (e.key === 'Escape') return closeCall();
+  if (e.key === 'ArrowRight') return show(S.qpos + 1);
+  if (e.key === 'ArrowLeft') return show(S.qpos - 1);
+  const r = RESULTS.find(x => x.hot === e.key);
+  if (r) saveResult(r);
+});
+
+async function openCall(start = 0){
+  if (!S.t1 || !S.key1 || !S.phone1) {
+    alert('Сначала загрузите базу 1 и выберите ключ и столбец с телефоном на вкладке «Данные».');
+    return;
+  }
+  renderOverview();
+  if (!S.visible.length) { alert('В текущем фильтре нет клиентов для обзвона.'); return; }
+  // Строки, обработанные по колонке результатов пролонгации (текст, цвет, комментарий), в прозвон не попадают
+  const clicked = S.visible[start];
+  S.queue = S.visible.filter(r => !rowInfo(r).lock);
+  if (!S.queue.length) { alert('Все строки в этом списке уже обработаны по колонке результатов пролонгации.'); return; }
+  const pos = clicked ? S.queue.indexOf(clicked) : -1;
+  ensureT2();
+  document.body.classList.add('call-open');
+  $('call').classList.remove('hidden');
+  await syncEvents(true);
+  show(pos < 0 ? 0 : pos);
+}
+function closeCall(){
+  $('call').classList.add('hidden');
+  document.body.classList.remove('call-open');
+  showStage('overview');
+}
+
+/* ---------- Карточка клиента: пользователь сам выбирает, что и где выводить ---------- */
+// Место каждого столбца базы 1: title (заголовок), left (слева), center (центр), hidden (не показывать).
+// Выбор хранится в браузере по названиям столбцов, данные клиента никуда не уходят.
+const LAYOUT_KEY = 'autodozvon.layout';
+const PINNED_KEY = 'autodozvon.pinned';
+const PLACES = [['title', 'Заголовок (имя клиента)'], ['left', 'Слева: ключевые данные'],
+                ['center', 'В центре: карточка'], ['hidden', 'Не показывать']];
+S.layout = (() => { try { return JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}; } catch (e) { return {}; } })();
+// Закреплённые поля: стоят в начале своей области у каждого клиента, даже когда значения нет
+S.pinned = (() => { try { return JSON.parse(localStorage.getItem(PINNED_KEY)) || {}; } catch (e) { return {}; } })();
+function saveLayout(){
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(S.layout));
+    localStorage.setItem(PINNED_KEY, JSON.stringify(S.pinned));
+  } catch (e) { /* хранилище недоступно */ }
+}
+// Умолчание: ключ и телефон выводятся отдельно, имя — заголовком, ключевые поля — слева, остальное — в центр
+function placeOf(h){
+  if (S.layout[h]) return S.layout[h];
+  if (h === S.key1 || h === S.phone1) return 'hidden';
+  const defaultTitle = S.t1.headers.find(x => NAME_RX.test(x) && x !== S.key1);
+  if (h === defaultTitle && !S.t1.headers.some(x => S.layout[x] === 'title')) return 'title';
+  if (FACT_RX.some(rx => rx.test(h))) return 'left';
+  return 'center';
+}
+// Закрепить можно только поле, которое выводится слева или в центре
+function pinnable(h){ return placeOf(h) === 'left' || placeOf(h) === 'center'; }
+// Поля области: сначала закреплённые (в порядке столбцов базы 1), затем остальные с непустым значением
+function areaFields(r, place){
+  const all = S.t1.headers.filter(h => placeOf(h) === place);
+  return [...all.filter(h => S.pinned[h]), ...all.filter(h => !S.pinned[h] && norm(r[h]))];
+}
+// У закреплённого пустого поля выводим «—», чтобы место не пропадало
+function shownValue(r, h){ return norm(r[h]) || (S.pinned[h] ? '—' : ''); }
+function renderLayoutBox(){
+  const box = $('layoutBox');
+  if (!S.t1) { box.innerHTML = '<div class="status-msg">Загрузите базу 1, чтобы выбрать столбцы</div>'; return; }
+  box.innerHTML = '<table><thead><tr><th>Столбец базы 1</th><th>Где выводить в карточке</th><th>Закрепить</th></tr></thead><tbody></tbody></table>';
+  const tb = box.querySelector('tbody');
+  S.t1.headers.forEach(h => {
+    const tr = document.createElement('tr');
+    const td1 = document.createElement('td'); td1.textContent = h;
+    const td2 = document.createElement('td');
+    const sel = document.createElement('select');
+    PLACES.forEach(([v, label]) => sel.add(new Option(label, v)));
+    sel.value = placeOf(h);
+    const td3 = document.createElement('td');
+    const pin = document.createElement('input');
+    pin.type = 'checkbox';
+    pin.checked = !!S.pinned[h];
+    pin.setAttribute('aria-label', `Закрепить поле «${h}»`);
+    const syncPin = () => { pin.disabled = !pinnable(h); };
+    sel.addEventListener('change', () => {
+      S.layout[h] = sel.value;
+      syncPin();
+      saveLayout();
+      if (S.cur) show(S.qpos);
+    });
+    pin.addEventListener('change', () => {
+      if (pin.checked) S.pinned[h] = true; else delete S.pinned[h];
+      saveLayout();
+      if (S.cur) show(S.qpos);
+    });
+    syncPin();
+    td2.appendChild(sel);
+    td3.appendChild(pin);
+    tr.append(td1, td2, td3);
+    tb.appendChild(tr);
+  });
+}
+$('layoutReset').addEventListener('click', () => {
+  S.layout = {};
+  S.pinned = {};
+  saveLayout();
+  renderLayoutBox();
+  if (S.cur) show(S.qpos);
+});
+
+// Строка выводится целиком: без обрезки текста и без скрытия полей
+function fieldRow(h, v){
+  const row = document.createElement('div'); row.className = 'field';
+  const k = document.createElement('span'); k.className = 'k'; k.textContent = h;
+  const val = document.createElement('span'); val.className = 'v'; val.textContent = v;
+  row.append(k, val);
+  return row;
+}
+function show(pos){
+  pos = Math.max(0, pos);
+  if (!S.queue.length || pos >= S.queue.length) {
+    S.qpos = S.queue.length; // «Назад» из конца вернёт на последнего клиента
+    S.cur = null;
+    $('cPos').textContent = S.queue.length ? 'Список обзвона закончился' : 'Нет клиентов для обзвона';
+    $('cProgress').style.width = S.queue.length ? '100%' : '0';
+    ['cName','cMeta','cPhone','cComment','cPrevResult','cErr'].forEach(id => $(id).textContent = '');
+    $('cFacts').innerHTML = ''; $('cPhones').innerHTML = ''; $('cBadges').innerHTML = ''; $('cFields').innerHTML = '';
+    S.phones = []; S.phoneIdx = 0;
+    $('cCommentBox').classList.add('empty');
+    $('cNote').value = '';
+    $('cLockWarn').classList.add('hidden');
+    return;
+  }
+  S.qpos = pos;
+  const r = S.queue[pos];
+  S.cur = r;
+  const info = rowInfo(r);
+  const key = norm(r[S.key1]);
+  const headers = S.t1.headers;
+
+  $('cPos').textContent = `Клиент ${pos + 1} из ${S.queue.length}`;
+  $('cProgress').style.width = `${((pos + 1) / S.queue.length) * 100}%`;
+
+  const titleH = headers.find(h => placeOf(h) === 'title' && norm(r[h]));
+  $('cName').textContent = titleH ? norm(r[titleH]) : `Клиент ${key}`;
+  $('cMeta').textContent = `Ключ ${key} · строка Excel ${r.__row}` + (info.done ? ` · уже обзвонен: ${info.res}` : '');
+  S.phones = phoneList(r);
+  S.phoneIdx = 0;
+  renderPhones();
+
+  const factBox = $('cFacts');
+  factBox.innerHTML = '';
+  areaFields(r, 'left').forEach(h => {
+    const d = document.createElement('div'); d.className = 'fact';
+    const k = document.createElement('span'); k.className = 'fk'; k.textContent = h;
+    const v = document.createElement('span'); v.className = 'fv'; v.textContent = shownValue(r, h);
+    d.append(k, v);
+    factBox.appendChild(d);
+  });
+
+  const box = $('cFields');
+  box.innerHTML = '';
+  const grid = document.createElement('div'); grid.className = 'tgrid';
+  areaFields(r, 'center').forEach(h => grid.appendChild(fieldRow(h, shownValue(r, h))));
+  box.appendChild(grid);
+  if (!grid.children.length) {
+    box.insertAdjacentHTML('beforeend', '<div class="status-msg">Нет полей для центра. Выберите их на вкладке «Данные», в блоке «Карточка клиента».</div>');
+  }
+
+  $('cComment').textContent = info.comment || 'Комментариев нет';
+  $('cComment').parentElement.title = info.comment;
+  $('cCommentBox').classList.toggle('empty', !info.comment);
+
+  const lockMsg = info.lock
+    ? `В «${S.resCol1}» уже есть: ${info.lock}${info.lock === 'текст' ? ' «' + info.lockText + '»' : ''}` : '';
+  const doneMsg = info.done
+    ? `Уже записано: ${info.res}${info.row2 && info.row2[S.date2] ? ' (' + info.row2[S.date2] + ')' : ''}` : '';
+  $('cPrevResult').textContent = [lockMsg, doneMsg].filter(Boolean).join(' · ');
+  $('cLockWarn').classList.toggle('hidden', !info.lock);
+  $('cLockWarn').textContent = info.lock ? `Строка обработана в базе 1: ${info.lock}` : '';
+  $('cNote').value = info.row2 ? stripResult(norm(info.row2[S.note2])) : '';
+  $('cErr').textContent = info.noPhone ? 'В этой строке нет номера, набрать нельзя.' : '';
+  renderAdvBox(r, info);
+  renderBadges(info, S.phones.length);
+  renderDetails(info);
+}
+/* ---------- Номера клиента: один или несколько в ячейке, набираются по очереди ---------- */
+function renderPhones(){
+  const box = $('cPhones');
+  box.innerHTML = '';
+  $('cPhone').textContent = S.phones[S.phoneIdx] || (S.cur ? '— нет номера —' : '');
+  S.phones.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'btn-secondary btn-small phone-chip' + (i === S.phoneIdx ? ' active' : '');
+    b.textContent = `${i + 1}. ${p}`;
+    b.addEventListener('click', () => { S.phoneIdx = i; renderPhones(); });
+    box.appendChild(b);
+  });
+  $('bNextPhone').disabled = S.phoneIdx >= S.phones.length - 1;
+}
+$('bNextPhone').addEventListener('click', () => {
+  if (S.phoneIdx < S.phones.length - 1) { S.phoneIdx++; renderPhones(); }
+});
+
+/* ---------- Телефон ---------- */
+async function api(url){
+  const r = await fetch(url, {cache:'no-store'});
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || data.ok === false) throw new Error(data.message || `Ошибка ${r.status}`);
+  return data;
+}
+// Статус телефона показывается и в карточке прозвона, и в простом режиме
+function setState(text, tone){
+  ['cState', 'pState'].forEach(id => {
+    const el = $(id);
+    el.textContent = text;
+    el.className = 'phone-status' + (tone ? ' ' + tone : '');
+  });
+}
+async function dial(){
+  if (!S.cur) return;
+  const digits = toDialDigits(S.phones[S.phoneIdx]);
+  if (!digits) { $('cErr').textContent = 'Нет номера для набора'; return; }
+  S.callStart = 0; S.callEnd = 0;
+  $('cTimer').textContent = '';
+  setState('Отправляю команду…', 'warn');
+  $('cErr').textContent = '';
+  try {
+    const data = await api(`/api/dial?num=${digits}`);
+    $('cErr').textContent = `${data.message} · набрано: ${digits}`;
+    logLine('cmd', `набор ${digits}: ${data.message}`);
+  } catch (err) {
+    setState('Ошибка набора', 'bad');
+    $('cErr').textContent = err.message;
+    logLine('cmd', `набор ${digits}: ${err.message}`);
+  }
+}
+async function sendKey(k, target = 'cErr'){
+  try {
+    await api(`/api/key?k=${encodeURIComponent(k)}`);
+    $(target).textContent = `Клавиша ${k} отправлена`;
+    logLine('cmd', `клавиша ${k}: отправлена`);
+  } catch (err) {
+    $(target).textContent = err.message;
+    logLine('cmd', `клавиша ${k}: ${err.message}`);
+  }
+}
+async function syncEvents(initial){
+  try {
+    const r = await fetch(`/api/events?after=${initial ? 0 : S.lastEvent}`, {cache:'no-store'});
+    const data = await r.json();
+    setServer(true);
+    if (initial) { S.lastEvent = data.last; return; }
+    data.events.forEach(handleEvent);
+    S.lastEvent = data.last;
+  } catch (err) {
+    setServer(false);
+  }
+}
+function handleEvent(ev){
+  const tone = ev.event === 'established' ? 'ok' : (END_EVENTS.includes(ev.event) ? 'warn' : '');
+  setState(EVENT_TEXT[ev.event] || ev.event, tone);
+  const who = ev.remote ? ` · абонент ${ev.remote}` : '';
+  logLine('event', `${EVENT_TEXT[ev.event] || ev.event} [${ev.event}]${who}`);
+  if (ev.event === 'outgoing') { S.callStart = 0; S.callEnd = 0; $('cTimer').textContent = ''; }
+  if (ev.event === 'established') { S.callStart = Date.now(); S.callEnd = 0; }
+  if (END_EVENTS.includes(ev.event) && S.callStart) S.callEnd = Date.now();
+  if (END_EVENTS.includes(ev.event) && S.cur && S.phoneIdx < S.phones.length - 1) {
+    $('cErr').textContent = `Следующий номер: ${S.phones[S.phoneIdx + 1]}. Нажмите «Следующий номер», затем «Набрать»`;
+  }
+}
+function setServer(ok){
+  const el = $('srv');
+  el.textContent = ok ? 'Сервер на связи' : 'Сервер не отвечает: запустите autodozvon.py';
+  el.className = 'badge ' + (ok ? 'ok' : 'bad');
+}
+setInterval(() => syncEvents(false), 800);
+setInterval(() => {
+  if (S.callStart && !S.callEnd) $('cTimer').textContent = fmtTime(Date.now() - S.callStart);
+  else if (S.callStart && S.callEnd) $('cTimer').textContent = fmtTime(S.callEnd - S.callStart);
+}, 500);
+fetch('/api/status', {cache:'no-store'}).then(r => setServer(r.ok)).catch(() => setServer(false));
+
+/* ---------- Журнал, клавиши телефона, простой и расширенный режимы ---------- */
+function logLine(kind, text){
+  S.log.push({t: new Date(), kind, text});
+  if (S.log.length > 500) S.log.shift();
+  renderLogs();
+}
+function renderLogs(){
+  const html = S.log.slice(-200).reverse().map(e =>
+    `<div><span class="t">${e.t.toLocaleTimeString('ru-RU')}</span>${esc(e.text)}</div>`).join('')
+    || '<div>Событий пока нет</div>';
+  ['pLog', 'cLog'].forEach(id => { if ($(id)) $(id).innerHTML = html; });
+  if ($('dLog')) $('dLog').innerHTML = S.log.slice(-100).reverse().map(e =>
+    `<tr><td>${e.t.toLocaleTimeString('ru-RU')}</td><td>${e.kind === 'event' ? 'Телефон' : 'Команда'}</td><td>${esc(e.text)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="empty-state">Событий пока нет</td></tr>';
+}
+// Детализация клиента: результаты из базы 2 и события сессии
+function renderDetails(info){
+  const r2 = info.row2;
+  $('dRes').innerHTML = r2 && norm(r2[S.result2])
+    ? `<tr><td>${esc(r2[S.date2] || '')}</td><td>${esc(r2[S.result2])}</td><td>${esc(r2[S.num2] || '')}</td><td>${esc(r2[S.note2] || '')}</td></tr>`
+    : '<tr><td colspan="4" class="empty-state">Результатов пока нет</td></tr>';
+}
+// Значки статуса клиента, как теги в АРМ
+function renderBadges(info, phoneCount){
+  const chips = [];
+  if (info.done) chips.push(`<span class="badge ok">${esc(info.res)}</span>`);
+  else if (info.lock) chips.push(`<span class="badge info">обработана: ${esc(info.lock)}</span>`);
+  else if (info.noPhone) chips.push('<span class="badge bad">нет номера</span>');
+  else chips.push('<span class="badge warn">не обзвонен</span>');
+  if (phoneCount > 1) chips.push(`<span class="badge info">номеров: ${phoneCount}</span>`);
+  if (info.comment) chips.push('<span class="badge info">есть комментарий АКЦ</span>');
+  $('cBadges').innerHTML = chips.join('');
+}
+// Поиск в шапке: ключ или любая цифра телефона, ищем среди клиентов в текущем списке
+$('cSearch').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const q = norm(e.target.value).toLowerCase();
+  const digits = q.replace(/\D/g, '');
+  const idx = S.queue.findIndex(r => keyOf(r[S.key1]).includes(q)
+    || (digits.length >= 4 && phoneList(r).some(p => toDialDigits(p).includes(digits))));
+  if (idx >= 0) show(idx);
+  else $('cErr').textContent = `В текущем списке нет клиента «${q}»`;
+});
+// Кнопки клавиш по группам; одни и те же группы в простом режиме и в расширенном прозвоне
+function buildKeyGroups(container, onKey){
+  container.innerHTML = '';
+  KEY_GROUPS.forEach(([title, keys]) => {
+    const g = document.createElement('div'); g.className = 'keygroup';
+    const t = document.createElement('div'); t.className = 'gt'; t.textContent = title;
+    const grid = document.createElement('div'); grid.className = 'keygrid';
+    keys.forEach(([label, value]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = `key=${value}`;
+      b.addEventListener('click', () => onKey(value));
+      grid.appendChild(b);
+    });
+    g.append(t, grid);
+    container.appendChild(g);
+  });
+}
+// Список разрешённых клавиш берём с сервера, чтобы UI и сервер не расходились
+async function loadKeys(){
+  try {
+    const data = await api('/api/keys');
+    fillKeySelect(data.keys);
+  } catch (err) {
+    fillKeySelect(KEY_GROUPS.flatMap(g => g[1].map(k => k[1])));
+  }
+}
+function fillKeySelect(keys){
+  const sel = $('pKeySel');
+  sel.innerHTML = '';
+  keys.forEach(k => sel.add(new Option(k, k)));
+}
+async function phoneDial(){
+  const digits = toDialDigits($('pNum').value);
+  if (!digits) { $('pErr').textContent = 'Введите номер'; return; }
+  setState('Отправляю команду…', 'warn');
+  try {
+    const data = await api(`/api/dial?num=${digits}`);
+    $('pErr').textContent = data.message;
+    logLine('cmd', `набор ${digits}: ${data.message}`);
+  } catch (err) {
+    $('pErr').textContent = err.message;
+    logLine('cmd', `набор ${digits}: ${err.message}`);
+  }
+}
+// Расширенный режим: всё видно, поля не прячутся, справа журнал, клавиши и сырые данные
+function toggleAdvanced(){
+  const on = !document.body.classList.contains('advanced');
+  document.body.classList.toggle('advanced', on);
+  document.querySelectorAll('.adv-only').forEach(el => el.classList.toggle('hidden', !on));
+  if (!on) showTab('general');
+  $('cAdv').textContent = on ? 'Обычный режим' : 'Расширенный режим';
+  if (S.cur) show(S.qpos);
+}
+function renderAdvBox(r, info){
+  $('cRaw').textContent = JSON.stringify({client: r, base2: info.row2 || null}, null, 2);
+  renderLogs();
+}
+buildKeyGroups($('pKeys'), k => sendKey(k, 'pErr'));
+buildKeyGroups($('cKeys'), k => sendKey(k, 'cErr'));
+$('pDial').addEventListener('click', phoneDial);
+$('pNum').addEventListener('keydown', e => { if (e.key === 'Enter') phoneDial(); });
+$('pHang').addEventListener('click', () => sendKey('CANCEL', 'pErr'));
+$('pKeySend').addEventListener('click', () => sendKey($('pKeySel').value, 'pErr'));
+$('cAdv').addEventListener('click', toggleAdvanced);
+loadKeys();
+
+/* ---------- Результат ---------- */
+// Убираем результат из начала комментария, чтобы в поле оператора был только его текст и при записи он не дублировался
+function stripResult(s){
+  const hit = RESULTS.find(r => s === r.value || s.startsWith(r.value + '. '));
+  return hit ? s.slice(hit.value.length).replace(/^\. /, '') : s;
+}
+function saveResult(item){
+  if (!S.cur) return;
+  const k = keyOf(S.cur[S.key1]);
+  if (!k) return;
+  let row = S.index2.get(k);
+  if (!row) {
+    row = {};
+    S.t2.headers.forEach(h => row[h] = '');
+    row[S.key2] = norm(S.cur[S.key1]);
+    S.t2.rows.push(row);
+    S.index2.set(k, row);
+  }
+  ensureT2();
+  row[S.result2] = item.value;
+  // Результат текстом первым в комментарии: «Дозвон: ответил. Текст оператора»
+  row[S.note2] = [item.value, norm($('cNote').value)].filter(Boolean).join('. ');
+  row[S.date2] = new Date().toLocaleString('ru-RU');
+  row[S.num2] = S.phones[S.phoneIdx] || '';
+  S.dirty = true;
+  $('exportInfo').textContent = 'Есть несохранённые изменения. Скачайте результаты прозвона.';
+  show(S.qpos + 1);
+}
+
+$('colorSource').value = S.colorSource;
+showStage('data');
+</script>
+</body>
+</html>
