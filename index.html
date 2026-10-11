@@ -239,6 +239,7 @@
     <button class="btn-secondary" data-stage="overview">2. Обзор базы</button>
     <button class="btn-secondary" data-stage="phone">Телефон: полное управление</button>
     <button class="btn-secondary" data-stage="compare">3. Сверка</button>
+    <button class="btn-secondary" data-stage="vin">VIN</button>
     <button class="btn-secondary" id="openCall">4. Прозвон на весь экран</button>
     <span class="grow"></span>
     <span id="srv" class="badge warn">Сервер: проверка…</span>
@@ -361,6 +362,32 @@
       <span class="status-msg">Совпадение по ключу клиента. Сравниваются одинаковые столбцы обеих баз.</span>
     </div>
     <div id="cmpResult"></div>
+  </section>
+
+  <!-- VIN: офлайн-разбор по стандарту, без интернета и без привязки к базам -->
+  <section id="stage-vin" class="hidden">
+    <div class="card">
+      <h2>Декодер VIN</h2>
+      <div class="file-meta">
+        Офлайн-разбор по стандарту ISO 3779 / SAE J853: проверка контрольной цифры, страна по коду изготовителя,
+        год выпуска. Точную марку, модель и комплектацию декодер не знает — для этого нужна база конкретного
+        производителя, которой здесь нет. Данные никуда не отправляются, разбор идёт в браузере.
+      </div>
+      <label>VIN (17 символов)</label>
+      <input type="text" id="vinInput" maxlength="32" autocomplete="off" spellcheck="false"
+             placeholder="Например, XTA212100Y1234567" style="text-transform:uppercase;letter-spacing:1px;font-family:monospace;font-size:16px">
+      <div class="status-line" id="vinErr" style="margin-top:8px"></div>
+    </div>
+    <div class="card hidden" id="vinResultCard">
+      <h2>Результат разбора</h2>
+      <div class="kv" id="vinFacts"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Позиции</th><th>Что это</th><th>Значение</th></tr></thead>
+          <tbody id="vinBreakdown"></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 </div>
 
@@ -784,13 +811,125 @@ window.addEventListener('beforeunload', e => {
 /* ---------- Навигация ---------- */
 document.querySelectorAll('button[data-stage]').forEach(b => b.addEventListener('click', () => showStage(b.dataset.stage)));
 function showStage(name){
-  ['data','overview','phone','compare'].forEach(s => $('stage-' + s).classList.toggle('hidden', s !== name));
+  ['data','overview','phone','compare','vin'].forEach(s => $('stage-' + s).classList.toggle('hidden', s !== name));
   document.querySelectorAll('button[data-stage]').forEach(b => {
     b.className = b.dataset.stage === name ? 'btn-primary' : 'btn-secondary';
   });
   if (name === 'overview') renderOverview();
   if (name === 'phone') renderLogs();
 }
+
+/* ---------- VIN: офлайн-разбор по ISO 3779 / SAE J853, без интернета и внешних баз ---------- */
+// Контрольная цифра (9-я позиция): таблица перевода букв в цифры и веса позиций — стандарт SAE J853 / NHTSA
+const VIN_TRANS = {
+  A:1, B:2, C:3, D:4, E:5, F:6, G:7, H:8,
+  J:1, K:2, L:3, M:4, N:5, P:7, R:9,
+  S:2, T:3, U:4, V:5, W:6, X:7, Y:8, Z:9,
+};
+const VIN_WEIGHTS = [8,7,6,5,4,3,2,10,0,9,8,7,6,5,4,3,2];
+// Код года в 10-й позиции: буквы I, O, Q в VIN не встречаются вовсе, а U, Z и цифра 0 для года не используются
+const VIN_YEAR_CODES = ['A','B','C','D','E','F','G','H','J','K','L','M','N','P','R','S','T','V','W','X','Y','1','2','3','4','5','6','7','8','9'];
+// Типичная страна по 1-му символу WMI (ISO 3780). Один символ делят несколько стран — показана самая частая,
+// точного производителя и страну смотрите в ПТС/СТС
+const VIN_COUNTRY_BY_FIRST = {
+  '1':'США', '4':'США', '5':'США', '2':'Канада', '3':'Мексика',
+  '6':'Австралия', '7':'Новая Зеландия', '8':'часто Аргентина', '9':'часто Бразилия',
+  J:'Япония', K:'Южная Корея', L:'Китай', N:'Турция', S:'Великобритания',
+  T:'Швейцария', U:'Румыния', V:'Франция', W:'Германия', X:'Россия/СНГ', Y:'Швеция/Финляндия', Z:'Италия',
+};
+function vinContinent(ch){
+  if (/[1-5]/.test(ch)) return 'Северная Америка';
+  if (/[6-7]/.test(ch)) return 'Океания';
+  if (/[8-9]/.test(ch)) return 'Южная Америка';
+  if (/[A-H]/.test(ch)) return 'Африка';
+  if (/[J-R]/.test(ch)) return 'Азия';
+  if (/[S-Z]/.test(ch)) return 'Европа';
+  return '';
+}
+function vinCheckDigit(vin){
+  let sum = 0;
+  for (let i = 0; i < 17; i++){
+    const ch = vin[i];
+    const val = /[0-9]/.test(ch) ? Number(ch) : VIN_TRANS[ch];
+    if (val === undefined) return null;
+    sum += val * VIN_WEIGHTS[i];
+  }
+  const rem = sum % 11;
+  return rem === 10 ? 'X' : String(rem);
+}
+function vinYears(code){
+  const idx = VIN_YEAR_CODES.indexOf(code);
+  if (idx === -1) return null;
+  const base = 1980 + idx;
+  return [base, base + 30];
+}
+function decodeVin(raw){
+  const vin = String(raw ?? '').toUpperCase().replace(/[\s-]+/g, '');
+  const res = { vin, errors: [] };
+  if (!vin) return res;
+  if (/[^A-Z0-9]/.test(vin)) res.errors.push('встречаются символы, кроме цифр и латинских букв');
+  else if (/[IOQ]/.test(vin)) res.errors.push('буквы I, O, Q в VIN не используются (их можно спутать с 1 и 0)');
+  if (vin.length !== 17) res.errors.push(`длина ${vin.length} символов вместо 17`);
+  if (res.errors.length) return res;
+
+  res.wmi = vin.slice(0, 3);
+  res.vds = vin.slice(3, 8);
+  res.checkChar = vin[8];
+  res.yearChar = vin[9];
+  res.plantChar = vin[10];
+  res.serial = vin.slice(11, 17);
+
+  res.checkExpected = vinCheckDigit(vin);
+  res.checkOk = res.checkExpected !== null && res.checkExpected === res.checkChar;
+
+  const first = vin[0];
+  res.continent = vinContinent(first);
+  res.country = VIN_COUNTRY_BY_FIRST[first] || '';
+
+  res.years = vinYears(res.yearChar);
+  if (res.years) res.yearLikely = /[0-9]/.test(vin[6]) ? res.years[0] : res.years[1];
+  return res;
+}
+function renderVin(){
+  const errBox = $('vinErr'), card = $('vinResultCard');
+  const r = decodeVin($('vinInput').value);
+  if (!r.vin){ errBox.textContent = ''; card.classList.add('hidden'); return; }
+  if (r.errors.length){
+    errBox.textContent = 'Не похоже на VIN: ' + r.errors.join('; ') + '.';
+    card.classList.add('hidden');
+    return;
+  }
+  errBox.textContent = '';
+  card.classList.remove('hidden');
+
+  const facts = [
+    ['Контрольная цифра (9-я позиция)', r.checkOk
+      ? `${r.checkChar} — совпадает с расчётной, формат похож на настоящий VIN`
+      : `${r.checkChar}, а по расчёту должна быть «${r.checkExpected}» — не совпадает. Для машин не из Северной Америки это нормально: там контрольную цифру не считают`],
+    ['Страна/регион по 1-й позиции', r.country ? `${r.continent} — ${r.country}` : r.continent],
+    ['Год выпуска (10-я позиция)', r.years
+      ? `${r.years[0]} или ${r.years[1]}` + (r.yearLikely ? ` (вероятнее ${r.yearLikely}, по 7-й позиции)` : '')
+      : 'код не используется для года выпуска'],
+  ];
+  $('vinFacts').innerHTML = facts.map(([k,v]) => `<div class="fact"><span class="fk">${esc(k)}</span><span class="fv">${esc(v)}</span></div>`).join('');
+
+  const rows = [
+    ['1–3', 'WMI: код изготовителя', r.wmi],
+    ['4–8', 'VDS: модель, кузов, двигатель — код свой у каждого производителя', r.vds],
+    ['9', 'Контрольная цифра', r.checkChar],
+    ['10', 'Год выпуска', r.yearChar],
+    ['11', 'Завод-изготовитель — код свой у каждого производителя', r.plantChar],
+    ['12–17', 'Серийный номер', r.serial],
+  ];
+  $('vinBreakdown').innerHTML = rows.map(([pos, label, val]) =>
+    `<tr><td>${esc(pos)}</td><td>${esc(label)}</td><td>${esc(val)}</td></tr>`).join('');
+}
+$('vinInput').addEventListener('input', e => {
+  const pos = e.target.selectionStart;
+  e.target.value = e.target.value.toUpperCase();
+  e.target.setSelectionRange(pos, pos);
+  renderVin();
+});
 
 /* ---------- Обзор базы ---------- */
 // Статус строки: результат и комментарий берутся из базы 2 по ключу клиента
